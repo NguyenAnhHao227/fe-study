@@ -4,7 +4,6 @@ Web ôn thi trắc nghiệm thuần HTML/CSS/JS (không backend, không build), 
 
 ## Tính năng
 - Chọn hồ sơ kiểu "chọn tài khoản" (ô **+** để thêm tên). Tiến độ lưu riêng từng người.
-- **Mỗi hồ sơ có mật khẩu riêng** (đặt lúc tạo, từ 4 ký tự): cần mật khẩu đó để **vào** và để **xoá** hồ sơ. Hồ sơ cũ chưa có mật khẩu sẽ được yêu cầu đặt lần đầu khi vào. Quên mật khẩu thì không lấy lại được.
 - 5 môn: CSI106, CEA201, MAE101, PRF192, SSA101 — hiện tổng số câu và số câu từng môn.
 - Tạo đề tuỳ chỉnh: số câu / thời gian (mặc định 50 câu / 60', CSI106: 60 câu / 60'), chủ đề, nguồn câu hỏi (mới / sai / đánh dấu / tất cả), trộn câu, trộn đáp án.
 - **Câu đã làm không bị lặp lại** ở đề mới; **câu sai** gom vào hộp riêng để ôn lại (làm đúng thì ra khỏi hộp).
@@ -30,11 +29,33 @@ Push cả thư mục này lên repo → Settings → Pages → Deploy from branc
 - Môn khác: bấm vào môn → **Nhập ngân hàng câu hỏi** (`.docx`/`.txt`/`.json`), hoặc chạy `build-bank.js` với mã môn khác rồi thêm `<script src="data/<mã>.js">` vào `index.html`.
 - Định dạng file: `Question N: [ID: …] …`, các dòng `A. …`, `Answer: B`, `Explanation: …`, dòng `Vietnamese: …` ngay dưới mỗi mục để có bản dịch.
 
+## AI dùng chung + giải thích dùng chung (Supabase, tuỳ chọn)
+
+Mặc định mỗi người tự nhập API key AI trong ⚙ Cài đặt và giải thích chỉ lưu trong trình duyệt của người đó. Bật Supabase (miễn phí) để:
+- **API key AI nằm ở máy chủ** (Edge Function), không ai thấy được. Người dùng chỉ nhập một **mã truy cập** (một lần mỗi trình duyệt) là dùng được AI.
+- **Giải thích + bản dịch AI lưu chung**: ai bấm trước thì mọi người sau dùng lại trên **mọi máy**, không tốn thêm lượt AI. Chỉ xem giải thích đã có thì **không cần mã**.
+- **Giới hạn lượt AI**: mỗi thiết bị tối đa 50 lượt/ngày và toàn hệ thống 300 lượt/ngày (đổi được).
+- Hồ sơ và tiến độ vẫn nằm trong trình duyệt từng máy, không mật khẩu, không đồng bộ.
+
+Cài đặt (làm một lần):
+1. Tạo project tại https://supabase.com (gói Free).
+2. **SQL Editor** → dán toàn bộ `supabase/schema.sql` → Run.
+3. **Edge Functions** → tạo function tên `ai`, dán nội dung `supabase/functions/ai/index.ts`, Deploy. (Nếu function có tên khác, ví dụ tên mặc định do Supabase đặt, khai báo tên đó ở `aiFunction` trong `assets/config.js`.)
+4. **Edge Functions → Secrets** thêm 4 secret: `AI_BASE` (vd `https://api.xah.io/v1`), `AI_KEY` (API key AI), `AI_MODEL` (vd `deepseek-4.1-flash-ckey`), `ACCESS_CODE` (mã truy cập bạn tự đặt, nên dài từ 8 ký tự).
+5. **Project Settings → API**: lấy **Project URL** và **anon public key** → điền vào `assets/config.js` (hai giá trị này công khai, an toàn khi commit).
+6. Commit & push. Gửi mã truy cập cho bạn bè; đổi mã bằng cách sửa secret `ACCESS_CODE`.
+
+Đổi giới hạn lượt AI (SQL Editor):
+```sql
+update app_config set value = '30'  where key = 'ai_device_limit';
+update app_config set value = '200' where key = 'ai_global_limit';
+```
+Để trống `assets/config.js` thì app quay về chế độ cục bộ như cũ.
+
 ## Lưu ý khi đưa lên GitHub
 - **Dữ liệu người dùng nằm trong trình duyệt** (IndexedDB) của từng máy. Hồ sơ và "giải thích đã lưu" **không tự đồng bộ giữa các máy**. Có 2 cách chia sẻ:
   - ⚙ Cài đặt → Sao lưu / Nhập sao lưu (chuyển tiến độ giữa các máy).
   - ⚙ Cài đặt → *Xuất giải thích AI cho GitHub* → thay `data/explanations.js` → commit. Từ đó mọi người mở trang đều có sẵn các giải thích đó.
   - Muốn đồng bộ tự động thật sự cần backend (Firebase/Supabase…) — chưa làm.
-- **Mật khẩu hồ sơ** chỉ để tách hồ sơ giữa những người dùng chung trình duyệt (lưu dạng băm SHA-256 có muối). Vì dữ liệu nằm trong trình duyệt nên người rành kỹ thuật vẫn có thể đọc/xoá dữ liệu bằng công cụ dev — đây không phải bảo mật thật.
 - **API key** chỉ lưu trong trình duyệt người dùng, không nằm trong mã nguồn. Mỗi người tự nhập key của mình.
 - Repo công khai = ngân hàng câu hỏi (`data/*.js`) công khai. Cân nhắc để repo private hoặc bản quyền đề thi.

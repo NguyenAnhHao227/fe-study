@@ -70,95 +70,57 @@ let PROFILE = null;
 const ui = { manage: false, rf: 'all', aiShown: new Set(), aiBusy: {}, aiErr: {}, trBusy: {} };
 const listProfiles = () => DB.get('profiles', []).map(id => DB.get('p:' + id)).filter(Boolean);
 const save = () => { if (PROFILE) DB.set('p:' + PROFILE.id, PROFILE); };
-function createProfile(name, pw) {
-  const p = { id: uid(), name, color: colorFor(name), pw: makePw(pw), settings: { vi: true }, subj: {}, sessions: [], active: null, created: Date.now() };
+function createProfile(name) {
+  const p = { id: uid(), name, color: colorFor(name), settings: { vi: true }, subj: {}, sessions: [], active: null, created: Date.now() };
   DB.set('p:' + p.id, p); DB.set('profiles', [...DB.get('profiles', []), p.id]);
   return p;
 }
-
-/* ---- mật khẩu từng hồ sơ (chỉ lưu bản băm SHA-256 có muối; bảo vệ phía trình duyệt) ---- */
-function sha256(msg) {
-  const rr = (v, a) => (v >>> a) | (v << (32 - a)), primes = [];
-  for (let c = 2; primes.length < 64; c++) if (primes.every(p => c % p)) primes.push(c);
-  const K = primes.map(p => Math.floor((Math.cbrt(p) % 1) * 2 ** 32));
-  let H = primes.slice(0, 8).map(p => Math.floor((Math.sqrt(p) % 1) * 2 ** 32));
-  const bytes = [...new TextEncoder().encode(msg)], bits = bytes.length * 8;
-  bytes.push(0x80); while (bytes.length % 64 !== 56) bytes.push(0);
-  for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 255);
-  const w = new Array(64);
-  for (let o = 0; o < bytes.length; o += 64) {
-    for (let i = 0; i < 16; i++) w[i] = (bytes[o + 4 * i] << 24) | (bytes[o + 4 * i + 1] << 16) | (bytes[o + 4 * i + 2] << 8) | bytes[o + 4 * i + 3];
-    for (let i = 16; i < 64; i++) {
-      const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
-    }
-    let [a, b, c, d, e, f, g, h] = H;
-    for (let i = 0; i < 64; i++) {
-      const t1 = (h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
-      const t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
-      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-    }
-    H = [H[0] + a | 0, H[1] + b | 0, H[2] + c | 0, H[3] + d | 0, H[4] + e | 0, H[5] + f | 0, H[6] + g | 0, H[7] + h | 0];
-  }
-  return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
-}
-const makePw = pw => { const salt = uid() + uid(); return { salt, h: sha256(salt + ':' + pw) }; };
-const checkPw = (p, pw) => !p.pw || sha256(p.pw.salt + ':' + pw) === p.pw.h;
-const nameTaken = (n, exceptId) => listProfiles().some(p => p.id !== exceptId && p.name.toLowerCase() === n.toLowerCase());
-
-/* hộp thoại: nhập mật khẩu / đặt mật khẩu mới / tạo người mới */
-async function askPassword(title, text, okLabel, danger) {
-  const r = await modal(`<h3>${esc(title)}</h3><div>${text}</div>
-    <label>Mật khẩu</label><input type="password" autocomplete="off" autofocus>
-    <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn ${danger ? 'danger' : 'pri'}" data-m="ok">${esc(okLabel)}</button></div>`);
-  return r.v === 'ok' ? r.el.querySelector('input').value : null;
-}
-const PW_HINT = '<div class="sm muted" style="margin-top:8px">Cần mật khẩu này để <b>vào</b> và để <b>xoá</b> hồ sơ. Quên mật khẩu thì không lấy lại được.</div>';
-async function askNewPassword(title, intro) {
-  let err = '';
-  for (;;) {
-    const r = await modal(`<h3>${esc(title)}</h3>${intro ? `<div>${intro}</div>` : ''}${err ? `<div class="ai-err">${esc(err)}</div>` : ''}
-      <label>Mật khẩu (từ 4 ký tự)</label><input type="password" id="pw1" autocomplete="new-password" autofocus>
-      <label>Nhập lại mật khẩu</label><input type="password" id="pw2" autocomplete="new-password">${PW_HINT}
-      <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn pri" data-m="ok">Lưu</button></div>`);
-    if (r.v !== 'ok') return null;
-    const a = r.el.querySelector('#pw1').value, b = r.el.querySelector('#pw2').value;
-    if (a.length < 4) err = 'Mật khẩu cần ít nhất 4 ký tự'; else if (a !== b) err = 'Hai mật khẩu không khớp'; else return a;
-  }
-}
-async function askNewProfile() {
-  let name = '', err = '';
-  for (;;) {
-    const r = await modal(`<h3>Thêm người</h3>${err ? `<div class="ai-err">${esc(err)}</div>` : ''}
-      <label>Tên của bạn</label><input type="text" id="np-n" maxlength="24" value="${esc(name)}" placeholder="Ví dụ: Mozart" autofocus>
-      <label>Mật khẩu (từ 4 ký tự)</label><input type="password" id="np-p" autocomplete="new-password">
-      <label>Nhập lại mật khẩu</label><input type="password" id="np-p2" autocomplete="new-password">${PW_HINT}
-      <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn pri" data-m="ok">Tạo hồ sơ</button></div>`);
-    if (r.v !== 'ok') return null;
-    name = r.el.querySelector('#np-n').value.trim();
-    const a = r.el.querySelector('#np-p').value, b = r.el.querySelector('#np-p2').value;
-    if (!name) err = 'Hãy nhập tên'; else if (nameTaken(name)) err = 'Tên này đã có rồi';
-    else if (a.length < 4) err = 'Mật khẩu cần ít nhất 4 ký tự'; else if (a !== b) err = 'Hai mật khẩu không khớp';
-    else return { name, pw: a };
-  }
-}
-/* mở khoá hồ sơ để vào; hồ sơ cũ chưa có mật khẩu thì bắt đặt mật khẩu lần đầu */
-async function unlockProfile(p) {
-  if (!p.pw) {
-    const pw = await askNewPassword(`Đặt mật khẩu cho “${p.name}”`, 'Hồ sơ này chưa có mật khẩu. Hãy đặt một mật khẩu để tiếp tục.');
-    if (pw == null) return false;
-    p.pw = makePw(pw); DB.set('p:' + p.id, p); return true;
-  }
-  for (;;) {
-    const pw = await askPassword(`Vào hồ sơ “${p.name}”`, 'Nhập mật khẩu của hồ sơ này.', 'Vào');
-    if (pw == null) return false;
-    if (checkPw(p, pw)) return true;
-    toast('Sai mật khẩu');
-  }
-}
-const setUnlocked = id => { try { id ? sessionStorage.setItem('fe-unlocked', id) : sessionStorage.removeItem('fe-unlocked'); } catch (_) {} };
-const getUnlocked = () => { try { return sessionStorage.getItem('fe-unlocked'); } catch (_) { return null; } };
 function subjData(code) { return PROFILE.subj[code] || (PROFILE.subj[code] = { done: {}, star: {}, cfg: null }); }
+
+/* ============ máy chủ dùng chung (Supabase) — tuỳ chọn ============
+ * Khi assets/config.js có URL + anon key: AI chạy qua máy chủ (API key AI nằm ở máy chủ, không ai thấy)
+ * và giải thích/bản dịch AI được dùng chung cho mọi người. Hồ sơ & tiến độ vẫn nằm trong trình duyệt từng máy. */
+async function fetchT(url, opt, ms = 90000) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { ...opt, signal: ctl.signal }); }
+  catch (e) { throw new Error(e.name === 'AbortError' ? 'Máy chủ phản hồi quá lâu (hết thời gian chờ)' : e.message); }
+  finally { clearTimeout(t); }
+}
+const CFG = window.FE_CONFIG || {};
+const CLOUD = { on: !!(CFG.supabaseUrl && CFG.supabaseAnonKey), expl: {}, tr: {} };
+const SB = (CFG.supabaseUrl || '').replace(/\/$/, '');
+const sbHeaders = () => ({ apikey: CFG.supabaseAnonKey, authorization: 'Bearer ' + CFG.supabaseAnonKey });
+async function loadShared() { // tải toàn bộ giải thích/bản dịch dùng chung (ai cũng đọc được, không cần mã)
+  if (!CLOUD.on) return;
+  try {
+    const grab = async (table, cols, fn) => {
+      for (let off = 0; ; off += 1000) {
+        const r = await fetchT(`${SB}/rest/v1/${table}?select=${cols}&order=key&limit=1000&offset=${off}`, { headers: sbHeaders() }, 30000);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const rows = await r.json(); rows.forEach(fn); if (rows.length < 1000) break;
+      }
+    };
+    await grab('explanations', 'key,text,author,model,ts', r => { CLOUD.expl[r.key] = { t: r.text, by: r.author, m: r.model, ts: r.ts }; });
+    await grab('translations', 'key,data,author,ts', r => { CLOUD.tr[r.key] = { ...r.data, by: r.author, ts: r.ts }; });
+  } catch (e) { console.warn('shared', e); }
+}
+const deviceId = () => { let d = DB.get('device'); if (!d) { d = uid() + uid(); DB.set('device', d); } return d; };
+async function cloudAI(body) { // nhờ máy chủ gọi AI giùm (kèm mã truy cập đã lưu trên trình duyệt này)
+  const r = await fetchT(SB + '/functions/v1/' + (CFG.aiFunction || 'ai'), { method: 'POST', headers: { ...sbHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ ...body, code: DB.get('code', ''), device: deviceId(), name: PROFILE ? PROFILE.name : '' }) }, 100000);
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 403) { DB.del('code'); throw new Error('CODE'); }
+  if (!r.ok) throw new Error(j.error || j.message || 'Lỗi máy chủ AI ' + r.status);
+  return j;
+}
+async function ensureCode() { // chưa có mã truy cập -> hỏi một lần rồi nhớ
+  if (DB.get('code')) return true;
+  const r = await modal(`<h3>Mã truy cập AI</h3><div>Nhập mã do người quản lý trang cung cấp để dùng AI giải thích. Chỉ cần nhập một lần trên trình duyệt này.</div>
+    <label>Mã truy cập</label><input type="password" autocomplete="off" autofocus>
+    <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn pri" data-m="ok">Lưu</button></div>`);
+  const c = r.v === 'ok' ? r.el.querySelector('input').value.trim() : '';
+  if (!c) return false;
+  DB.set('code', c); return true;
+}
 
 /* ============ ngân hàng câu hỏi ============ */
 const bankCache = {};
@@ -201,16 +163,16 @@ const AI = {
     if (!c.key) throw new Error('NOKEY');
     let r, j;
     if (c.provider === 'anthropic') {
-      r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: c.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }) });
+      r = await fetchT('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: c.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }) });
       j = await r.json(); if (!r.ok) throw new Error(j.error && j.error.message || r.status);
       return j.content.map(b => b.text || '').join('').trim();
     }
     if (c.provider === 'gemini') {
-      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': c.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }] }) });
+      r = await fetchT(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': c.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }] }) });
       j = await r.json(); if (!r.ok) throw new Error(j.error && j.error.message || r.status);
       return ((j.candidates || [])[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
     }
-    r = await fetch(c.base.replace(/\/$/, '') + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
+    r = await fetchT(c.base.replace(/\/$/, '') + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
     j = await r.json(); if (!r.ok) throw new Error(j.error && j.error.message || r.status);
     return (j.choices[0].message.content || '').trim();
   },
@@ -228,7 +190,8 @@ const AI = {
     return JSON.parse(m[0]);
   },
 };
-const explCache = () => Object.assign({}, window.SEED_EXPL || {}, DB.get('expl', {}));
+const explCache = () => Object.assign({}, window.SEED_EXPL || {}, DB.get('expl', {}), CLOUD.expl);
+const trCache = () => Object.assign({}, DB.get('tr', {}), CLOUD.tr);
 
 function md(s) {
   const lines = esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').split('\n');
@@ -387,7 +350,7 @@ function viewSubject(code) {
 
 /* ---- thẻ câu hỏi (dùng cho làm bài và xem lại) ---- */
 function qCard(code, q, it, o) {
-  const vi = PROFILE.settings.vi, key = qkey(code, q.id), tr = DB.get('tr', {})[key] || {};
+  const vi = PROFILE.settings.vi, key = qkey(code, q.id), tr = trCache()[key] || {};
   const tvRaw = q.tv || tr.t || '', tv = same(tvRaw, q.t) ? '' : tvRaw, multi = q.a.length > 1, d = subjData(code), b = getBank(code);
   const sel = new Set([...(it.pick || '').split(''), ...(o.reveal ? [] : it.sel || [])]);
   const opts = it.ord.map((k, pos) => {
@@ -439,20 +402,33 @@ function aiInner(key) {
 const refreshAI = key => $$('[data-aibox]').filter(e => e.dataset.aibox === key).forEach(e => { e.innerHTML = aiInner(key); });
 
 async function aiExplain(key, force) {
-  const [code, id] = splitKey(key), q = getBank(code).idx.get(id), cache = DB.get('expl', {});
+  const [code, id] = splitKey(key), q = getBank(code).idx.get(id);
   if (!force && explCache()[key]) { ui.aiShown.add(key); return refreshAI(key); }
+  if (CLOUD.on && !await ensureCode()) return;
   ui.aiErr[key] = ''; ui.aiBusy[key] = 1; refreshAI(key);
   try {
-    const text = await AI.explain(q);
-    cache[key] = { t: text, by: PROFILE.name, m: AI.cfg().model, ts: Date.now() }; DB.set('expl', cache); ui.aiShown.add(key);
-  } catch (e) { ui.aiErr[key] = e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ ở góc trên để cài đặt.' : 'Lỗi AI: ' + e.message; }
+    if (CLOUD.on) {
+      const j = await cloudAI({ action: 'explain', key, force: !!force, q: { t: q.t, o: q.o.map(o => o[1]), correct: q.a.split('').map(k => q.o.find(o => o[0] === k)[1]), e: q.e || '' } });
+      CLOUD.expl[key] = { t: j.text, by: j.author, m: j.model, ts: j.ts };
+    } else {
+      const text = await AI.explain(q), cache = DB.get('expl', {});
+      cache[key] = { t: text, by: PROFILE.name, m: AI.cfg().model, ts: Date.now() }; DB.set('expl', cache);
+    }
+    ui.aiShown.add(key);
+  } catch (e) { ui.aiErr[key] = e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ ở góc trên để cài đặt.' : e.message === 'CODE' ? 'Mã truy cập không đúng — bấm lại để nhập mã.' : 'Lỗi AI: ' + e.message; }
   delete ui.aiBusy[key]; refreshAI(key);
 }
 async function aiTranslate(key) {
   const [code, id] = splitKey(key), q = getBank(code).idx.get(id);
+  if (CLOUD.on && !await ensureCode()) return;
   ui.trBusy[key] = 1; render(true);
-  try { const r = await AI.translate(q); const tr = DB.get('tr', {}); tr[key] = { t: r.t || '', o: r.o || {}, by: PROFILE.name, ts: Date.now() }; DB.set('tr', tr); }
-  catch (e) { toast(e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ để cài đặt.' : 'Lỗi dịch: ' + e.message); }
+  try {
+    if (CLOUD.on) {
+      const j = await cloudAI({ action: 'translate', key, q: { t: q.t, o: Object.fromEntries(q.o.map(o => [o[0], o[1]])) } });
+      CLOUD.tr[key] = { ...j.data, by: j.author, ts: j.ts };
+    } else { const r = await AI.translate(q); const tr = DB.get('tr', {}); tr[key] = { t: r.t || '', o: r.o || {}, by: PROFILE.name, ts: Date.now() }; DB.set('tr', tr); }
+  }
+  catch (e) { toast(e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ để cài đặt.' : e.message === 'CODE' ? 'Mã truy cập không đúng' : 'Lỗi dịch: ' + e.message); }
   delete ui.trBusy[key]; render(true);
 }
 
@@ -627,7 +603,33 @@ async function importBank(code) {
 }
 
 /* ---- cài đặt + sao lưu ---- */
+async function openSettingsShared() { // cài đặt khi đã bật máy chủ dùng chung
+  await modal(`<h3>⚙ Cài đặt</h3>
+    <div class="sm muted">AI do máy chủ cấp nên <b>không cần API key</b>. Giải thích AI được lưu chung: ai bấm trước thì mọi người sau dùng lại, không tốn lượt. Chỉ khi tạo giải thích <b>mới</b> mới cần mã truy cập.</div>
+    <label>Mã truy cập AI</label><input type="password" id="s-code" value="${esc(DB.get('code', ''))}" placeholder="do người quản lý trang cấp" autocomplete="off">
+    <div class="row" style="margin-top:12px"><button class="btn sm" id="s-test">Kiểm tra AI</button><span class="sm" id="s-res"></span></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+    <b>Sao lưu</b>
+    <div class="sm muted" style="margin:4px 0 10px">Đã có <b>${Object.keys(explCache()).length}</b> giải thích AI dùng chung. Hồ sơ và tiến độ nằm trong trình duyệt này; dùng sao lưu để chuyển sang máy khác.</div>
+    <div class="row"><button class="btn sm" id="s-exp">⬇ Xuất sao lưu</button><button class="btn sm" id="s-imp">⬆ Nhập sao lưu</button></div>
+    <div class="acts"><button class="btn" data-m="no">Đóng</button><button class="btn pri" data-m="ok">Lưu</button></div>`, {
+    onMount(el) {
+      $('#s-exp', el).onclick = exportAll; $('#s-imp', el).onclick = importAll;
+      const res = $('#s-res', el), show = (ok, msg) => { res.innerHTML = `<span style="color:var(--${ok ? 'ok' : 'bad'})">${ok ? '✓' : '✗'} ${esc(msg)}</span>`; };
+      $('#s-test', el).onclick = async () => {
+        const c = $('#s-code', el).value.trim(); if (!c) return show(false, 'Hãy nhập mã truy cập');
+        DB.set('code', c); res.innerHTML = '<span class="spin"></span>Đang thử…';
+        try {
+          const j = await cloudAI({ action: 'ping', deep: true }), sec = j.aiMs != null ? (j.aiMs / 1000).toFixed(1) + ' giây' : '';
+          if (j.aiError) show(false, `Mã đúng nhưng AI lỗi sau ${sec}: ${j.aiError}`);
+          else show(true, `Mã đúng${sec ? ` · AI trả lời trong ${sec}` : ''} · hôm nay thiết bị này ${j.usedDevice}/${j.limitDevice} lượt, toàn hệ thống ${j.usedGlobal}/${j.limitGlobal}`);
+        } catch (e) { show(false, e.message === 'CODE' ? 'Mã truy cập không đúng' : e.message); }
+      };
+    },
+  }).then(r => { if (r.v === 'ok') { const c = $('#s-code', r.el).value.trim(); c ? DB.set('code', c) : DB.del('code'); toast('Đã lưu cài đặt'); } });
+}
 async function openSettings() {
+  if (CLOUD.on) return openSettingsShared();
   const c = AI.cfg();
   await modal(`<h3>⚙ Cài đặt</h3>
     <div class="sm muted">Khoá API chỉ lưu trong trình duyệt này, <b>không</b> nằm trong mã nguồn và không được sao lưu/xuất ra file.</div>
@@ -659,7 +661,7 @@ async function openSettings() {
 const stamp = () => new Date().toISOString().slice(0, 10);
 function exportAll() {
   const out = { app: 'fe-study', v: 1, ts: Date.now(), data: {} };
-  DB.mem.forEach((v, k) => { if (k !== 'api' && k !== 'cur') out.data[k] = v; });
+  DB.mem.forEach((v, k) => { if (!['api', 'cur', 'code', 'device'].includes(k)) out.data[k] = v; });
   download(`fe-study-backup-${stamp()}.json`, JSON.stringify(out)); toast('Đã xuất file sao lưu');
 }
 function exportSeed() {
@@ -685,7 +687,7 @@ async function importAll() {
       const ids = new Set(cur.sessions.map(s => s.id)); (inc.sessions || []).forEach(s => { if (!ids.has(s.id)) cur.sessions.push(s); });
       cur.sessions.sort((a, b) => b.ts - a.ts); DB.set('p:' + id, cur);
     });
-    PROFILE = PROFILE ? DB.get('p:' + PROFILE.id) : null; Object.keys(bankCache).forEach(k => delete bankCache[k]);
+    PROFILE = DB.get('cur') ? DB.get('p:' + DB.get('cur')) : null; Object.keys(bankCache).forEach(k => delete bankCache[k]);
     toast('Đã nhập sao lưu'); render();
   } catch (e) { alertBox('Không nhập được', esc(e.message)); }
 }
@@ -693,38 +695,27 @@ async function importAll() {
 /* ============ sự kiện ============ */
 const A = {
   home: () => go('#/home'),
-  who: () => { ui.manage = false; stopTimer(); save(); PROFILE = null; setUnlocked(null); go('#/'); },
+  who: () => { ui.manage = false; go('#/'); },
   theme: () => {
     const de = document.documentElement, eff = de.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'), nt = eff === 'dark' ? 'light' : 'dark';
     de.dataset.theme = nt; try { localStorage.setItem('fe-theme', nt); } catch (_) {}
   },
   settings: () => openSettings(),
   manage: () => { ui.manage = !ui.manage; render(); },
-  'pick-profile': async el => {
-    if (ui.manage) return;
-    const p = DB.get('p:' + el.dataset.id); if (!p || !await unlockProfile(p)) return;
-    PROFILE = p; PROFILE.settings = PROFILE.settings || { vi: true };
-    DB.set('cur', p.id); setUnlocked(p.id); go('#/home');
-  },
+  'pick-profile': el => { if (ui.manage) return; PROFILE = DB.get('p:' + el.dataset.id); DB.set('cur', PROFILE.id); PROFILE.settings = PROFILE.settings || { vi: true }; go('#/home'); },
   'new-profile': async () => {
-    const r = await askNewProfile(); if (!r) return;
-    const p = createProfile(r.name, r.pw); toast(`Đã tạo hồ sơ ${p.name}`); render();
+    const n = await askName('Tên của bạn là gì?'); if (!n) return;
+    if (listProfiles().some(p => p.name.toLowerCase() === n.toLowerCase())) return toast('Tên này đã có rồi');
+    createProfile(n); render();
   },
   'rename-profile': async el => {
     const p = DB.get('p:' + el.dataset.id), n = await askName('Đổi tên', p.name); if (!n) return;
-    if (nameTaken(n, p.id)) return toast('Tên này đã có rồi');
     p.name = n; DB.set('p:' + p.id, p); render();
   },
   'del-profile': async el => {
     const p = DB.get('p:' + el.dataset.id);
-    if (p.pw) {
-      const pw = await askPassword(`Xoá hồ sơ “${p.name}”?`, 'Xoá cùng toàn bộ tiến độ và lịch sử, <b>không thể hoàn tác</b>. Nhập mật khẩu của hồ sơ này để xoá.', 'Xoá', true);
-      if (pw == null) return;
-      if (!checkPw(p, pw)) return toast('Sai mật khẩu — chưa xoá hồ sơ');
-    } else if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
-    DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id));
-    if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; setUnlocked(null); }
-    render();
+    if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
+    DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
   },
   'open-subject': el => go('#/s/' + el.dataset.code),
   'import-bank': el => importBank(el.dataset.code),
@@ -801,8 +792,8 @@ addEventListener('beforeunload', () => { if (PROFILE && PROFILE.active) save(); 
 /* ============ khởi động ============ */
 (async () => {
   await DB.init();
-  const cur = DB.get('cur'); // chỉ tự vào lại (khi tải lại trang) nếu hồ sơ đã được mở khoá trong tab này
-  PROFILE = cur && cur === getUnlocked() ? DB.get('p:' + cur) || null : null;
+  const cur = DB.get('cur'); PROFILE = cur ? DB.get('p:' + cur) || null : null;
+  loadShared().then(() => { if (route().name !== 'who') render(true); }); // giải thích dùng chung (chạy nền)
   if (PROFILE) PROFILE.settings = PROFILE.settings || { vi: true };
   if (!location.hash || location.hash === '#') location.hash = '#/'; // luôn mở màn chọn người trước
   render();
