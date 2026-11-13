@@ -70,11 +70,94 @@ let PROFILE = null;
 const ui = { manage: false, rf: 'all', aiShown: new Set(), aiBusy: {}, aiErr: {}, trBusy: {} };
 const listProfiles = () => DB.get('profiles', []).map(id => DB.get('p:' + id)).filter(Boolean);
 const save = () => { if (PROFILE) DB.set('p:' + PROFILE.id, PROFILE); };
-function createProfile(name) {
-  const p = { id: uid(), name, color: colorFor(name), settings: { vi: true }, subj: {}, sessions: [], active: null, created: Date.now() };
+function createProfile(name, pw) {
+  const p = { id: uid(), name, color: colorFor(name), pw: makePw(pw), settings: { vi: true }, subj: {}, sessions: [], active: null, created: Date.now() };
   DB.set('p:' + p.id, p); DB.set('profiles', [...DB.get('profiles', []), p.id]);
   return p;
 }
+
+/* ---- mật khẩu từng hồ sơ (chỉ lưu bản băm SHA-256 có muối; bảo vệ phía trình duyệt) ---- */
+function sha256(msg) {
+  const rr = (v, a) => (v >>> a) | (v << (32 - a)), primes = [];
+  for (let c = 2; primes.length < 64; c++) if (primes.every(p => c % p)) primes.push(c);
+  const K = primes.map(p => Math.floor((Math.cbrt(p) % 1) * 2 ** 32));
+  let H = primes.slice(0, 8).map(p => Math.floor((Math.sqrt(p) % 1) * 2 ** 32));
+  const bytes = [...new TextEncoder().encode(msg)], bits = bytes.length * 8;
+  bytes.push(0x80); while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 255);
+  const w = new Array(64);
+  for (let o = 0; o < bytes.length; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = (bytes[o + 4 * i] << 24) | (bytes[o + 4 * i + 1] << 16) | (bytes[o + 4 * i + 2] << 8) | bytes[o + 4 * i + 3];
+    for (let i = 16; i < 64; i++) {
+      const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H = [H[0] + a | 0, H[1] + b | 0, H[2] + c | 0, H[3] + d | 0, H[4] + e | 0, H[5] + f | 0, H[6] + g | 0, H[7] + h | 0];
+  }
+  return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+const makePw = pw => { const salt = uid() + uid(); return { salt, h: sha256(salt + ':' + pw) }; };
+const checkPw = (p, pw) => !p.pw || sha256(p.pw.salt + ':' + pw) === p.pw.h;
+const nameTaken = (n, exceptId) => listProfiles().some(p => p.id !== exceptId && p.name.toLowerCase() === n.toLowerCase());
+
+/* hộp thoại: nhập mật khẩu / đặt mật khẩu mới / tạo người mới */
+async function askPassword(title, text, okLabel, danger) {
+  const r = await modal(`<h3>${esc(title)}</h3><div>${text}</div>
+    <label>Mật khẩu</label><input type="password" autocomplete="off" autofocus>
+    <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn ${danger ? 'danger' : 'pri'}" data-m="ok">${esc(okLabel)}</button></div>`);
+  return r.v === 'ok' ? r.el.querySelector('input').value : null;
+}
+const PW_HINT = '<div class="sm muted" style="margin-top:8px">Cần mật khẩu này để <b>vào</b> và để <b>xoá</b> hồ sơ. Quên mật khẩu thì không lấy lại được.</div>';
+async function askNewPassword(title, intro) {
+  let err = '';
+  for (;;) {
+    const r = await modal(`<h3>${esc(title)}</h3>${intro ? `<div>${intro}</div>` : ''}${err ? `<div class="ai-err">${esc(err)}</div>` : ''}
+      <label>Mật khẩu (từ 4 ký tự)</label><input type="password" id="pw1" autocomplete="new-password" autofocus>
+      <label>Nhập lại mật khẩu</label><input type="password" id="pw2" autocomplete="new-password">${PW_HINT}
+      <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn pri" data-m="ok">Lưu</button></div>`);
+    if (r.v !== 'ok') return null;
+    const a = r.el.querySelector('#pw1').value, b = r.el.querySelector('#pw2').value;
+    if (a.length < 4) err = 'Mật khẩu cần ít nhất 4 ký tự'; else if (a !== b) err = 'Hai mật khẩu không khớp'; else return a;
+  }
+}
+async function askNewProfile() {
+  let name = '', err = '';
+  for (;;) {
+    const r = await modal(`<h3>Thêm người</h3>${err ? `<div class="ai-err">${esc(err)}</div>` : ''}
+      <label>Tên của bạn</label><input type="text" id="np-n" maxlength="24" value="${esc(name)}" placeholder="Ví dụ: Mozart" autofocus>
+      <label>Mật khẩu (từ 4 ký tự)</label><input type="password" id="np-p" autocomplete="new-password">
+      <label>Nhập lại mật khẩu</label><input type="password" id="np-p2" autocomplete="new-password">${PW_HINT}
+      <div class="acts"><button class="btn" data-m="no">Huỷ</button><button class="btn pri" data-m="ok">Tạo hồ sơ</button></div>`);
+    if (r.v !== 'ok') return null;
+    name = r.el.querySelector('#np-n').value.trim();
+    const a = r.el.querySelector('#np-p').value, b = r.el.querySelector('#np-p2').value;
+    if (!name) err = 'Hãy nhập tên'; else if (nameTaken(name)) err = 'Tên này đã có rồi';
+    else if (a.length < 4) err = 'Mật khẩu cần ít nhất 4 ký tự'; else if (a !== b) err = 'Hai mật khẩu không khớp';
+    else return { name, pw: a };
+  }
+}
+/* mở khoá hồ sơ để vào; hồ sơ cũ chưa có mật khẩu thì bắt đặt mật khẩu lần đầu */
+async function unlockProfile(p) {
+  if (!p.pw) {
+    const pw = await askNewPassword(`Đặt mật khẩu cho “${p.name}”`, 'Hồ sơ này chưa có mật khẩu. Hãy đặt một mật khẩu để tiếp tục.');
+    if (pw == null) return false;
+    p.pw = makePw(pw); DB.set('p:' + p.id, p); return true;
+  }
+  for (;;) {
+    const pw = await askPassword(`Vào hồ sơ “${p.name}”`, 'Nhập mật khẩu của hồ sơ này.', 'Vào');
+    if (pw == null) return false;
+    if (checkPw(p, pw)) return true;
+    toast('Sai mật khẩu');
+  }
+}
+const setUnlocked = id => { try { id ? sessionStorage.setItem('fe-unlocked', id) : sessionStorage.removeItem('fe-unlocked'); } catch (_) {} };
+const getUnlocked = () => { try { return sessionStorage.getItem('fe-unlocked'); } catch (_) { return null; } };
 function subjData(code) { return PROFILE.subj[code] || (PROFILE.subj[code] = { done: {}, star: {}, cfg: null }); }
 
 /* ============ ngân hàng câu hỏi ============ */
@@ -602,7 +685,7 @@ async function importAll() {
       const ids = new Set(cur.sessions.map(s => s.id)); (inc.sessions || []).forEach(s => { if (!ids.has(s.id)) cur.sessions.push(s); });
       cur.sessions.sort((a, b) => b.ts - a.ts); DB.set('p:' + id, cur);
     });
-    PROFILE = DB.get('cur') ? DB.get('p:' + DB.get('cur')) : null; Object.keys(bankCache).forEach(k => delete bankCache[k]);
+    PROFILE = PROFILE ? DB.get('p:' + PROFILE.id) : null; Object.keys(bankCache).forEach(k => delete bankCache[k]);
     toast('Đã nhập sao lưu'); render();
   } catch (e) { alertBox('Không nhập được', esc(e.message)); }
 }
@@ -610,27 +693,38 @@ async function importAll() {
 /* ============ sự kiện ============ */
 const A = {
   home: () => go('#/home'),
-  who: () => { ui.manage = false; go('#/'); },
+  who: () => { ui.manage = false; stopTimer(); save(); PROFILE = null; setUnlocked(null); go('#/'); },
   theme: () => {
     const de = document.documentElement, eff = de.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'), nt = eff === 'dark' ? 'light' : 'dark';
     de.dataset.theme = nt; try { localStorage.setItem('fe-theme', nt); } catch (_) {}
   },
   settings: () => openSettings(),
   manage: () => { ui.manage = !ui.manage; render(); },
-  'pick-profile': el => { if (ui.manage) return; PROFILE = DB.get('p:' + el.dataset.id); DB.set('cur', PROFILE.id); PROFILE.settings = PROFILE.settings || { vi: true }; go('#/home'); },
+  'pick-profile': async el => {
+    if (ui.manage) return;
+    const p = DB.get('p:' + el.dataset.id); if (!p || !await unlockProfile(p)) return;
+    PROFILE = p; PROFILE.settings = PROFILE.settings || { vi: true };
+    DB.set('cur', p.id); setUnlocked(p.id); go('#/home');
+  },
   'new-profile': async () => {
-    const n = await askName('Tên của bạn là gì?'); if (!n) return;
-    if (listProfiles().some(p => p.name.toLowerCase() === n.toLowerCase())) return toast('Tên này đã có rồi');
-    createProfile(n); render();
+    const r = await askNewProfile(); if (!r) return;
+    const p = createProfile(r.name, r.pw); toast(`Đã tạo hồ sơ ${p.name}`); render();
   },
   'rename-profile': async el => {
     const p = DB.get('p:' + el.dataset.id), n = await askName('Đổi tên', p.name); if (!n) return;
+    if (nameTaken(n, p.id)) return toast('Tên này đã có rồi');
     p.name = n; DB.set('p:' + p.id, p); render();
   },
   'del-profile': async el => {
     const p = DB.get('p:' + el.dataset.id);
-    if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
-    DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
+    if (p.pw) {
+      const pw = await askPassword(`Xoá hồ sơ “${p.name}”?`, 'Xoá cùng toàn bộ tiến độ và lịch sử, <b>không thể hoàn tác</b>. Nhập mật khẩu của hồ sơ này để xoá.', 'Xoá', true);
+      if (pw == null) return;
+      if (!checkPw(p, pw)) return toast('Sai mật khẩu — chưa xoá hồ sơ');
+    } else if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
+    DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id));
+    if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; setUnlocked(null); }
+    render();
   },
   'open-subject': el => go('#/s/' + el.dataset.code),
   'import-bank': el => importBank(el.dataset.code),
@@ -707,7 +801,8 @@ addEventListener('beforeunload', () => { if (PROFILE && PROFILE.active) save(); 
 /* ============ khởi động ============ */
 (async () => {
   await DB.init();
-  const cur = DB.get('cur'); PROFILE = cur ? DB.get('p:' + cur) || null : null;
+  const cur = DB.get('cur'); // chỉ tự vào lại (khi tải lại trang) nếu hồ sơ đã được mở khoá trong tab này
+  PROFILE = cur && cur === getUnlocked() ? DB.get('p:' + cur) || null : null;
   if (PROFILE) PROFILE.settings = PROFILE.settings || { vi: true };
   if (!location.hash || location.hash === '#') location.hash = '#/'; // luôn mở màn chọn người trước
   render();

@@ -4,6 +4,7 @@ Web ôn thi trắc nghiệm thuần HTML/CSS/JS (không backend, không build), 
 
 ## Tính năng
 - Chọn hồ sơ kiểu "chọn tài khoản" (ô **+** để thêm tên). Tiến độ lưu riêng từng người.
+- **Mỗi hồ sơ có mật khẩu riêng** (đặt lúc tạo, từ 4 ký tự): cần mật khẩu đó để **vào** và để **xoá** hồ sơ. Hồ sơ cũ chưa có mật khẩu sẽ được yêu cầu đặt lần đầu khi vào. Quên mật khẩu thì không lấy lại được.
 - 5 môn: CSI106, CEA201, MAE101, PRF192, SSA101 — hiện tổng số câu và số câu từng môn.
 - Tạo đề tuỳ chỉnh: số câu / thời gian (mặc định 50 câu / 60', CSI106: 60 câu / 60'), chủ đề, nguồn câu hỏi (mới / sai / đánh dấu / tất cả), trộn câu, trộn đáp án.
 - **Câu đã làm không bị lặp lại** ở đề mới; **câu sai** gom vào hộp riêng để ôn lại (làm đúng thì ra khỏi hộp).
@@ -34,5 +35,6 @@ Push cả thư mục này lên repo → Settings → Pages → Deploy from branc
   - ⚙ Cài đặt → Sao lưu / Nhập sao lưu (chuyển tiến độ giữa các máy).
   - ⚙ Cài đặt → *Xuất giải thích AI cho GitHub* → thay `data/explanations.js` → commit. Từ đó mọi người mở trang đều có sẵn các giải thích đó.
   - Muốn đồng bộ tự động thật sự cần backend (Firebase/Supabase…) — chưa làm.
+- **Mật khẩu hồ sơ** chỉ để tách hồ sơ giữa những người dùng chung trình duyệt (lưu dạng băm SHA-256 có muối). Vì dữ liệu nằm trong trình duyệt nên người rành kỹ thuật vẫn có thể đọc/xoá dữ liệu bằng công cụ dev — đây không phải bảo mật thật.
 - **API key** chỉ lưu trong trình duyệt người dùng, không nằm trong mã nguồn. Mỗi người tự nhập key của mình.
 - Repo công khai = ngân hàng câu hỏi (`data/*.js`) công khai. Cân nhắc để repo private hoặc bản quyền đề thi.
