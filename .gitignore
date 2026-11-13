@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+# sao lưu cá nhân (chứa tiến độ làm bài) — đừng đưa lên repo công khai
+fe-study-backup-*.json
