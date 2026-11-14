@@ -107,8 +107,22 @@ Deno.serve(async (req) => {
       const blocked = checkQuota(); if (blocked) return blocked;
       const opts = (Array.isArray(q.o) ? q.o : []).slice(0, 10).map((x: unknown) => str(x, 600));
       const correct = (Array.isArray(q.correct) ? q.correct : []).slice(0, 10).map((x: unknown) => str(x, 600));
-      const msg = `Câu hỏi: ${str(q.t, 4000)}\n\nCác đáp án:\n${opts.map((o: string) => "- " + o).join("\n")}\n\nĐáp án đúng: ${correct.join(" | ")}\n${q.e ? "Gợi ý có sẵn: " + str(q.e, 1500) : ""}`;
-      const text = await callAI(EXPLAIN_SYSTEM, msg);
+      const build = (hint: boolean) =>
+        `Câu hỏi: ${str(q.t, 2500)}\n\nCác đáp án:\n${opts.map((o: string) => "- " + o).join("\n")}\n\nĐáp án đúng: ${correct.join(" | ")}\n${hint && q.e ? "Gợi ý có sẵn: " + str(q.e, 400) : ""}`;
+      // Nếu dịch vụ AI từ chối vì quá dài (ngữ cảnh/token) thì tự thử lại với yêu cầu gọn hơn.
+      const isLimit = (e: unknown) => /limit|context|token|too (long|large)/i.test(e instanceof Error ? e.message : String(e));
+      let text = "";
+      try {
+        text = await callAI(EXPLAIN_SYSTEM, build(true), 700);
+      } catch (e) {
+        if (!isLimit(e)) throw e;
+        try {
+          text = await callAI(EXPLAIN_SYSTEM, build(false), 450);
+        } catch (e2) {
+          if (!isLimit(e2)) throw e2;
+          text = await callAI(EXPLAIN_SYSTEM, build(false), 250);
+        }
+      }
       if (!text) return json({ error: "AI không trả về nội dung" }, 502);
       const row = { key, text, author, model: Deno.env.get("AI_MODEL") ?? "", ts: Date.now() };
       await admin.from("explanations").upsert(row);
@@ -122,7 +136,14 @@ Deno.serve(async (req) => {
       const blocked = checkQuota(); if (blocked) return blocked;
       const o: Record<string, string> = {};
       Object.entries(q.o ?? {}).slice(0, 10).forEach(([k, v]) => { o[str(k, 2)] = str(v, 600); });
-      const out = await callAI(TRANSLATE_SYSTEM, JSON.stringify({ t: str(q.t, 4000), o }), 1200);
+      const payload = JSON.stringify({ t: str(q.t, 2500), o });
+      let out = "";
+      try {
+        out = await callAI(TRANSLATE_SYSTEM, payload, 1200);
+      } catch (e) {
+        if (!/limit|context|token|too (long|large)/i.test(e instanceof Error ? e.message : String(e))) throw e;
+        out = await callAI(TRANSLATE_SYSTEM, payload, 700);
+      }
       const m = out.match(/\{[\s\S]*\}/);
       if (!m) return json({ error: "AI trả về không đúng định dạng" }, 502);
       const data = JSON.parse(m[0]);

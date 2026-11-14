@@ -415,7 +415,7 @@ async function aiExplain(key, force) {
   ui.aiErr[key] = ''; ui.aiBusy[key] = 1; refreshAI(key);
   try {
     if (CLOUD.on) {
-      const j = await cloudAI({ action: 'explain', key, force: !!force, q: { t: q.t, o: q.o.map(o => o[1]), correct: q.a.split('').map(k => q.o.find(o => o[0] === k)[1]), e: q.e || '' } });
+      const j = await cloudAI({ action: 'explain', key, force: !!force, q: { t: q.t, o: q.o.map(o => o[1]), correct: q.a.split('').map(k => q.o.find(o => o[0] === k)[1]), e: (q.e || '').slice(0, 300) } });
       CLOUD.expl[key] = { t: j.text, by: j.author, m: j.model, ts: j.ts };
     } else {
       const text = await AI.explain(q), cache = DB.get('expl', {});
