@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Thống kê · FE Study</title>
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem('fe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+<style>
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:12px;margin:14px 0}
+  .stat{min-width:0}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:150px;margin-top:10px}
+  .bcol{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}
+  .bcol i{display:block;width:100%;background:var(--accent);border-radius:6px 6px 0 0;min-height:2px}
+  .bcol.ai i{background:var(--ok)}
+  .bcol b{font-size:.75rem}
+  .bcol span{font-size:.68rem;color:var(--muted)}
+  table.t{width:100%;border-collapse:collapse;font-size:.92rem}
+  table.t th,table.t td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line)}
+  table.t th:first-child,table.t td:first-child{text-align:left}
+  table.t th{color:var(--muted);font-weight:600;font-size:.8rem}
+  .meter{height:8px;background:var(--line);border-radius:99px;overflow:hidden;min-width:70px}
+  .meter i{display:block;height:100%;background:var(--accent)}
+  .login{max-width:420px}
+  .login input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:6px 0 12px}
+  .note{font-size:.82rem;color:var(--muted)}
+  .err{color:var(--bad);margin:8px 0}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="crumb">FE Study · Trang quản trị</div>
+  <div class="row" style="margin:6px 0 14px"><h1>Thống kê sử dụng</h1><span class="grow"></span>
+    <button class="btn sm" id="refresh" hidden>↻ Làm mới</button><button class="btn sm" id="logout" hidden>Thoát</button></div>
+
+  <section class="panel login" id="loginBox">
+    <h2>Mật khẩu quản trị</h2>
+    <input type="password" id="code" autocomplete="off" placeholder="Nhập mật khẩu quản trị" autofocus>
+    <button class="btn pri" id="go">Xem thống kê</button>
+    <div class="err" id="err"></div>
+  </section>
+
+  <div id="out" hidden>
+    <div class="grid" id="cards"></div>
+    <section class="panel"><h2>Thiết bị hoạt động mỗi ngày (14 ngày)</h2><div class="bars" id="dailyBars"></div></section>
+    <section class="panel"><h2>Theo môn học</h2><div style="overflow-x:auto"><table class="t" id="subjTable"></table></div></section>
+    <section class="panel"><h2>AI giải thích</h2>
+      <div class="grid" id="aiCards"></div>
+      <div class="row sm" style="margin-bottom:6px"><label for="price">Giá mỗi lượt AI (đồng):</label><input id="price" type="number" step="0.1" min="0" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"></div>
+      <div class="bars" id="aiBars"></div>
+    </section>
+    <p class="note">• Số liệu đếm theo <b>thiết bị/trình duyệt</b> (mã ngẫu nhiên, không lưu tên hay IP), nên một người dùng 2 máy tính là 2.<br>
+    • Ngày tính theo giờ UTC (chậm hơn giờ Việt Nam khoảng 7 giờ). Dữ liệu theo môn chỉ có từ lúc bật thống kê.</p>
+  </div>
+</main>
+<script src="assets/config.js"></script>
+<script>
+(() => {
+  const CFG = window.FE_CONFIG || {}, $ = id => document.getElementById(id);
+  const SUBJECTS = ['CSI106', 'CEA201', 'MAE101', 'PRF192', 'SSA101'];
+  const fmt = n => Number(n || 0).toLocaleString('vi-VN');
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const store = { get: k => { try { return sessionStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (_) {} } };
+  let last = null;
+
+  async function fetchStats(code) {
+    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) throw new Error('Trang chưa cấu hình máy chủ (assets/config.js trống)');
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+    try {
+      const r = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/functions/v1/' + (CFG.aiFunction || 'ai'), {
+        method: 'POST', signal: ctl.signal,
+        headers: { apikey: CFG.supabaseAnonKey, authorization: 'Bearer ' + CFG.supabaseAnonKey, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'stats', admin: code }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || j.message || 'Lỗi máy chủ ' + r.status);
+      return j.stats;
+    } catch (e) { throw new Error(e.name === 'AbortError' ? 'Máy chủ phản hồi quá lâu' : e.message); }
+    finally { clearTimeout(t); }
+  }
+
+  function stat(label, value, sub) {
+    const d = el('div', 'stat'); d.appendChild(el('b', null, value)); d.appendChild(el('span', null, label));
+    if (sub) { d.appendChild(el('div', 'note', sub)); } return d;
+  }
+  function days14(todayStr) { // 14 ngày UTC kết thúc ở "hôm nay" của máy chủ
+    const base = new Date(todayStr + 'T00:00:00Z').getTime(), out = [];
+    for (let i = 13; i >= 0; i--) out.push(new Date(base - i * 86400000).toISOString().slice(0, 10));
+    return out;
+  }
+  function bars(box, series, today, cls) {
+    box.replaceChildren();
+    const map = Object.fromEntries((series || []).map(x => [String(x.day).slice(0, 10), x.n]));
+    const days = days14(today), max = Math.max(1, ...days.map(d => map[d] || 0));
+    days.forEach(d => {
+      const n = map[d] || 0, col = el('div', 'bcol ' + (cls || ''));
+      col.title = d + ': ' + n;
+      col.appendChild(el('b', null, n ? String(n) : ''));
+      const bar = el('i'); bar.style.height = Math.max(2, n / max * 100) + '%'; col.appendChild(bar);
+      col.appendChild(el('span', null, d.slice(8) + '/' + d.slice(5, 7)));
+      box.appendChild(col);
+    });
+  }
+
+  function render(s) {
+    last = s;
+    const c = $('cards'); c.replaceChildren(
+      stat('Tổng thiết bị đã dùng', fmt(s.devices_total)),
+      stat('Hoạt động hôm nay', fmt(s.active_today)),
+      stat('Hoạt động 7 ngày qua', fmt(s.active_7d)),
+      stat('Thiết bị mới (7 ngày)', fmt(s.new_7d)),
+      stat('Quay lại (≥2 ngày / 7 ngày)', fmt(s.returning_7d)),
+    );
+    bars($('dailyBars'), s.daily, s.today);
+
+    const rows = new Map((s.subjects || []).map(x => [x.subject, x]));
+    const codes = [...SUBJECTS, ...[...rows.keys()].filter(k => !SUBJECTS.includes(k))];
+    const maxDev = Math.max(1, ...codes.map(k => (rows.get(k) || {}).devices || 0));
+    const t = $('subjTable'); t.replaceChildren();
+    const head = el('tr'); ['Môn', 'Thiết bị đã mở', 'Trong 7 ngày', 'Bài đã nộp', 'Câu đã trả lời', ''].forEach(h => head.appendChild(el('th', null, h))); t.appendChild(head);
+    codes.forEach(k => {
+      const x = rows.get(k) || { devices: 0, devices_7d: 0, sessions: 0, answers: 0 }, tr = el('tr');
+      [k, fmt(x.devices), fmt(x.devices_7d), fmt(x.sessions), fmt(x.answers)].forEach(v => tr.appendChild(el('td', null, v)));
+      const td = el('td'), m = el('div', 'meter'), i = el('i'); i.style.width = (x.devices / maxDev * 100) + '%'; m.appendChild(i); td.appendChild(m); tr.appendChild(td);
+      t.appendChild(tr);
+    });
+
+    const price = parseFloat($('price').value) || 0;
+    $('aiCards').replaceChildren(
+      stat('Giải thích đã lưu (dùng chung)', fmt(s.explanations)),
+      stat('Bản dịch đã lưu', fmt(s.translations)),
+      stat('Lượt AI hôm nay', fmt(s.ai_today), '≈ ' + fmt(Math.round(s.ai_today * price)) + ' đ'),
+      stat('Tổng lượt AI đã gọi', fmt(s.ai_total), '≈ ' + fmt(Math.round(s.ai_total * price)) + ' đ'),
+      stat('Thiết bị đã dùng AI', fmt(s.ai_devices)),
+    );
+    bars($('aiBars'), s.ai_daily, s.today, 'ai');
+    $('loginBox').hidden = true; $('out').hidden = false; $('refresh').hidden = false; $('logout').hidden = false;
+  }
+
+  async function load(code) {
+    $('err').textContent = ''; $('go').disabled = true; $('go').textContent = 'Đang tải…';
+    try { const s = await fetchStats(code); store.set('fe-admin', code); render(s); }
+    catch (e) { $('err').textContent = e.message; store.set('fe-admin', null); $('loginBox').hidden = false; $('out').hidden = true; $('refresh').hidden = true; $('logout').hidden = true; }
+    finally { $('go').disabled = false; $('go').textContent = 'Xem thống kê'; }
+  }
+
+  try { $('price').value = localStorage.getItem('fe-price') || '18.9'; } catch (_) { $('price').value = '18.9'; }
+  $('price').addEventListener('input', () => { try { localStorage.setItem('fe-price', $('price').value); } catch (_) {} if (last) render(last); });
+  $('go').onclick = () => { const c = $('code').value; if (c) load(c); else $('err').textContent = 'Hãy nhập mật khẩu'; };
+  $('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
+  $('refresh').onclick = () => { const c = store.get('fe-admin'); if (c) load(c); };
+  $('logout').onclick = () => { store.set('fe-admin', null); location.reload(); };
+  const saved = store.get('fe-admin'); if (saved) load(saved);
+})();
+</script>
+</body>
+</html>

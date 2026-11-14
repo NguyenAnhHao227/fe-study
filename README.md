@@ -56,6 +56,14 @@ update app_config set value = '200' where key = 'ai_global_limit';
 ```
 Để trống `assets/config.js` thì app quay về chế độ cục bộ như cũ.
 
+## Thống kê sử dụng (trang quản trị `admin.html`)
+
+Mở `https://<user>.github.io/<repo>/admin.html` và nhập **mật khẩu quản trị** để xem: tổng thiết bị đã dùng, hoạt động hôm nay / 7 ngày, thiết bị mới và quay lại, biểu đồ 14 ngày, thống kê **theo môn** (thiết bị đã mở, bài đã nộp, câu đã trả lời), số giải thích đã lưu và lượt AI (kèm chi phí ước tính).
+
+- Đếm theo **thiết bị/trình duyệt** bằng một mã ngẫu nhiên, **không lưu tên, không lưu IP**. Một người dùng 2 máy tính là 2.
+- Trang `admin.html` không có liên kết nào trỏ tới; mật khẩu được kiểm tra **ở máy chủ** (secret `ADMIN_CODE`), nên không biết mật khẩu thì không xem được số liệu.
+- Cài đặt: chạy lại `supabase/schema.sql` (thêm 2 bảng + 2 hàm), deploy lại function, thêm secret `ADMIN_CODE` (đặt khác `ACCESS_CODE`).
+
 ## Lưu ý khi đưa lên GitHub
 - **Dữ liệu người dùng nằm trong trình duyệt** (IndexedDB) của từng máy. Hồ sơ và "giải thích đã lưu" **không tự đồng bộ giữa các máy**. Có 2 cách chia sẻ:
   - ⚙ Cài đặt → Sao lưu / Nhập sao lưu (chuyển tiến độ giữa các máy).

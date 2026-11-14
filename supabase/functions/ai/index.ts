@@ -78,6 +78,33 @@ Deno.serve(async (req) => {
     if (!access) return json({ error: "Máy chủ chưa đặt secret ACCESS_CODE" }, 500);
 
     const body = await req.json().catch(() => ({}));
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // ---- thống kê ẩn danh: không cần mã truy cập; chỉ đếm thiết bị (mã ngẫu nhiên), không lưu tên/IP ----
+    if (body.action === "hit") {
+      const dev = str(body.device, 80);
+      if (!/^[\w-]{8,80}$/.test(dev)) return json({ ok: false }, 400);
+      const sj = str(body.subject, 12).toUpperCase();
+      const subject = /^[A-Z]{2,6}\d{2,4}$/.test(sj) ? sj : null;
+      const clamp = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)));
+      const { error } = await admin.rpc("fe_track", { p_device: dev, p_subject: subject, p_sessions: clamp(body.sessions, 1), p_answers: clamp(body.answers, 500) });
+      if (error) console.error("fe_track:", error.message);
+      return json({ ok: !error }, error ? 500 : 200);
+    }
+
+    // ---- trang quản trị: cần mật khẩu riêng ADMIN_CODE ----
+    if (body.action === "stats") {
+      const adminCode = Deno.env.get("ADMIN_CODE") ?? "";
+      if (!adminCode) return json({ error: "Máy chủ chưa đặt secret ADMIN_CODE" }, 500);
+      if (str(body.admin, 200) !== adminCode) {
+        await sleep(800);
+        return json({ error: "Mật khẩu quản trị không đúng" }, 403);
+      }
+      const { data, error } = await admin.rpc("fe_stats");
+      if (error) return json({ error: "Không đọc được thống kê: " + error.message }, 500);
+      return json({ ok: true, stats: data });
+    }
+
     if (str(body.code, 200) !== access) {
       await sleep(800); // làm chậm việc dò mã
       return json({ error: "Mã truy cập không đúng" }, 403);
@@ -85,7 +112,6 @@ Deno.serve(async (req) => {
     const device = str(body.device, 80);
     if (!/^[\w-]{8,80}$/.test(device)) return json({ error: "Thiếu mã thiết bị" }, 400);
 
-    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const day = new Date().toISOString().slice(0, 10);
 
     // ---- hạn mức: mỗi thiết bị / ngày và toàn hệ thống / ngày ----

@@ -105,6 +105,16 @@ async function loadShared() { // tải toàn bộ giải thích/bản dịch dù
   } catch (e) { console.warn('shared', e); }
 }
 const deviceId = () => { let d = DB.get('device'); if (!d) { d = uid() + uid(); DB.set('device', d); } return d; };
+/* Thống kê ẩn danh: chỉ gửi mã ngẫu nhiên của thiết bị (+ môn học, số câu); không gửi tên, không cần mã truy cập. */
+function trackRaw(extra) {
+  if (!CLOUD.on) return;
+  fetchT(SB + '/functions/v1/' + (CFG.aiFunction || 'ai'), { method: 'POST', headers: { ...sbHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ action: 'hit', device: deviceId(), ...extra }) }, 15000).catch(() => {});
+}
+function trackOnce(key, extra) { // mỗi thiết bị chỉ báo mỗi sự kiện một lần mỗi ngày
+  const day = new Date().toLocaleDateString('sv');
+  let t = DB.get('trk'); if (!t || t.day !== day) t = { day, done: {} };
+  if (t.done[key]) return; t.done[key] = 1; DB.set('trk', t); trackRaw(extra);
+}
 async function cloudAI(body) { // nhờ máy chủ gọi AI giùm (kèm mã truy cập đã lưu trên trình duyệt này)
   const r = await fetchT(SB + '/functions/v1/' + (CFG.aiFunction || 'ai'), { method: 'POST', headers: { ...sbHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ ...body, code: DB.get('code', ''), device: deviceId(), name: PROFILE ? PROFILE.name : '' }) }, 100000);
   const j = await r.json().catch(() => ({}));
@@ -516,6 +526,7 @@ function finish() {
   const correct = S.items.filter(i => i.ok === true).length;
   S.score = +(correct / S.items.length * 10).toFixed(2); S.used = Math.round(S.used); S.end = Date.now(); S.submitted = true;
   PROFILE.sessions.unshift(S); PROFILE.active = null; stopTimer(); save();
+  trackRaw({ subject: S.subj, sessions: 1, answers: S.items.filter(i => i.pick != null).length });
   go('#/result/' + S.id);
 }
 async function submitExam() {
@@ -580,6 +591,7 @@ function render(keep) {
   else { location.hash = '#/'; return; }
   if (r.name !== 'exam') stopTimer();
   app.innerHTML = html;
+  if (['home', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
   window.scrollTo(0, y);
   if (r.name === 'exam') startTimer();
   document.title = (r.name === 'exam' ? PROFILE.active.subj + ' · ' : '') + 'FE Study';
@@ -668,7 +680,7 @@ async function openSettings() {
 const stamp = () => new Date().toISOString().slice(0, 10);
 function exportAll() {
   const out = { app: 'fe-study', v: 1, ts: Date.now(), data: {} };
-  DB.mem.forEach((v, k) => { if (!['api', 'cur', 'code', 'device'].includes(k)) out.data[k] = v; });
+  DB.mem.forEach((v, k) => { if (!['api', 'cur', 'code', 'device', 'trk'].includes(k)) out.data[k] = v; });
   download(`fe-study-backup-${stamp()}.json`, JSON.stringify(out)); toast('Đã xuất file sao lưu');
 }
 function exportSeed() {
