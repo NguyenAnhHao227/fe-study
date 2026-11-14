@@ -22,10 +22,14 @@ python -m http.server 8000
 Push cả thư mục này lên repo → Settings → Pages → Deploy from branch → `main` / root. Mọi đường dẫn là tương đối nên chạy được ở `https://<user>.github.io/<repo>/`.
 
 ## Nạp câu hỏi
-- CSI106 hiện đã nạp đủ **550 câu + 5 đề mô phỏng**. Tạo lại từ file docx (thêm `--per-topic 8` để lấy bản test nhỏ):
+- Hiện đã nạp **1.873 câu**: CSI106 946, CEA201 318, PRF192 252, SSA101 357. **MAE101 chưa có dữ liệu** (nhập bằng nút trong app hoặc `build-bank.js`).
+- Dữ liệu được chuyển đổi từ thư mục nguồn `Nguon_de_thi_on_tap_5_mon_FE` (không đưa lên GitHub) bằng:
   ```bash
-  node tools/build-bank.js "<đường dẫn>/CSI106_Ngan_hang_cau_hoi_On_thi.docx" CSI106
+  node tools/convert-quiz-js.js
   ```
+  Lệnh này ghi đè `data/csi106.js`, `cea201.js`, `prf192.js`, `ssa101.js`; tự bỏ câu trùng và giữ câu nhiều đáp án.
+- Lời giải thích gốc có ghi "Đáp án B…": app tự đổi chữ cái cho khớp thứ tự đáp án đang bị trộn.
+- Từ file `.docx` theo định dạng bên dưới: `node tools/build-bank.js "<file.docx>" <MÃ_MÔN>` (thêm `--per-topic 8` để lấy bản test nhỏ).
 - Môn khác: bấm vào môn → **Nhập ngân hàng câu hỏi** (`.docx`/`.txt`/`.json`), hoặc chạy `build-bank.js` với mã môn khác rồi thêm `<script src="data/<mã>.js">` vào `index.html`.
 - Định dạng file: `Question N: [ID: …] …`, các dòng `A. …`, `Answer: B`, `Explanation: …`, dòng `Vietnamese: …` ngay dưới mỗi mục để có bản dịch.
 

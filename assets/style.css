@@ -164,6 +164,7 @@ code{background:var(--line);padding:1px 5px;border-radius:5px;font-size:.9em}
 .expl{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg)}
 .expl h4{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
 .expl .e-en{font-size:.97rem}
+.expl .e-en{white-space:pre-line}
 .aibox{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
 .ai-out{margin-top:10px;font-size:.95rem}
 .ai-out p{margin:.35em 0}.ai-out ul{margin:.3em 0;padding-left:1.2em}

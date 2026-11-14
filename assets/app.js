@@ -378,12 +378,19 @@ function qCard(code, q, it, o) {
     ${multi ? `<div class="sm muted" style="margin-top:10px">Câu này chọn <b>nhiều</b> đáp án.</div>` : ''}
     <ul class="opts">${opts}</ul>
     ${multi && o.interactive && o.instant && !o.reveal ? `<div class="nav"><button class="btn pri" data-act="confirm-multi" ${(it.sel || []).length ? '' : 'disabled'}>Xác nhận đáp án</button></div>` : ''}
-    ${fb}${o.reveal ? explBlock(code, q) : ''}</article>`;
+    ${fb}${o.reveal ? explBlock(code, q, it.ord) : ''}</article>`;
 }
-function explBlock(code, q) {
+/* Lời giải gốc ghi "Đáp án B…", "Option C…" theo thứ tự gốc; khi đáp án bị trộn thì đổi sang chữ cái đang hiển thị. */
+function remapLetters(text, ord) {
+  if (!text || !ord) return text;
+  const disp = k => { const i = ord.indexOf(k); return i < 0 ? k : LETTERS[i]; };
+  return text.replace(/((?:Đáp án|đáp án|Phương án|phương án|Lựa chọn|lựa chọn|Option|option|Answer|answer)s?\s+)([A-H](?:\s*(?:,|và|hoặc|and|or|\/)\s*[A-H]\b)*)\b/g,
+    (m, pre, list) => pre + list.replace(/[A-H]/g, disp));
+}
+function explBlock(code, q, ord) {
   const vi = PROFILE.settings.vi, key = qkey(code, q.id);
   return `<section class="expl"><h4>Giải thích</h4>
-    ${q.e ? `<div class="e-en">${esc(q.e)}</div>` : '<div class="muted sm">Câu này chưa có giải thích sẵn.</div>'}
+    ${q.e ? `<div class="e-en">${esc(remapLetters(q.e, ord))}</div>` : '<div class="muted sm">Câu này chưa có giải thích sẵn.</div>'}
     ${vi && q.ev && !same(q.ev, q.e) ? `<div class="e-vi">${esc(q.ev)}</div>` : ''}
     <div class="aibox" data-aibox="${esc(key)}">${aiInner(key)}</div></section>`;
 }
