@@ -629,7 +629,7 @@ async function openSettingsShared() { // cài đặt khi đã bật máy chủ d
         try {
           const j = await cloudAI({ action: 'ping', deep: true }), sec = j.aiMs != null ? (j.aiMs / 1000).toFixed(1) + ' giây' : '';
           if (j.aiError) show(false, `Mã đúng nhưng AI lỗi sau ${sec}: ${j.aiError}`);
-          else show(true, `Mã đúng${sec ? ` · AI trả lời trong ${sec}` : ''} · hôm nay thiết bị này ${j.usedDevice}/${j.limitDevice} lượt, toàn hệ thống ${j.usedGlobal}/${j.limitGlobal}`);
+          else show(true, `Mã đúng${sec ? ` · AI trả lời trong ${sec}` : ''}${j.aiSample ? ` (“${j.aiSample.slice(0, 40)}…”)` : ''} · hôm nay thiết bị này ${j.usedDevice}/${j.limitDevice} lượt, toàn hệ thống ${j.usedGlobal}/${j.limitGlobal}`);
         } catch (e) { show(false, e.message === 'CODE' ? 'Mã truy cập không đúng' : e.message); }
       };
     },

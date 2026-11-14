@@ -24,26 +24,51 @@ async function callAI(system: string, user: string, maxTokens = 700, timeoutMs =
   const model = Deno.env.get("AI_MODEL");
   const missing = [!base && "AI_BASE", !key && "AI_KEY", !model && "AI_MODEL"].filter(Boolean);
   if (missing.length) throw new Error("Máy chủ chưa cấu hình AI, đang thiếu secret: " + missing.join(", "));
-  const t0 = Date.now();
-  let r: Response;
-  try {
-    r = await fetch(base + "/chat/completions", {
-      method: "POST",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { "content-type": "application/json", authorization: "Bearer " + key },
-      body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
-    });
-  } catch (e) {
-    console.error(`AI lỗi mạng/timeout sau ${Date.now() - t0}ms:`, e);
-    throw new Error(`Dịch vụ AI không trả lời trong ${Math.round(timeoutMs / 1000)} giây (quá chậm hoặc không phản hồi)`);
+  const run = async (mt: number) => {
+    const t0 = Date.now();
+    let r: Response;
+    try {
+      r = await fetch(base + "/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { "content-type": "application/json", authorization: "Bearer " + key },
+        body: JSON.stringify({ model, max_tokens: mt, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+      });
+    } catch (e) {
+      console.error(`AI lỗi mạng/timeout sau ${Date.now() - t0}ms:`, e);
+      throw new Error(`Dịch vụ AI không trả lời trong ${Math.round(timeoutMs / 1000)} giây (quá chậm hoặc không phản hồi)`);
+    }
+    const j = await r.json().catch(() => ({}));
+    console.log(`AI ${model} status ${r.status} sau ${Date.now() - t0}ms (max_tokens ${mt})`);
+    if (!r.ok) {
+      console.error("AI trả lỗi:", r.status, JSON.stringify(j).slice(0, 500));
+      throw new Error(`Dịch vụ AI trả lỗi ${r.status}: ${j?.error?.message ?? j?.message ?? "không rõ"}`);
+    }
+    const choice = j?.choices?.[0];
+    const msg = choice?.message ?? {};
+    // nội dung có thể là chuỗi hoặc mảng các đoạn {type:"text", text:"..."}
+    const raw = Array.isArray(msg.content) ? msg.content.map((p: { text?: string }) => p?.text ?? "").join("") : msg.content;
+    const text = String(raw ?? "").trim();
+    const info = {
+      text,
+      finish: String(choice?.finish_reason ?? "?"),
+      reasoning: !!(msg.reasoning_content || msg.reasoning),
+      tokens: j?.usage?.completion_tokens ?? "?",
+    };
+    if (!text) console.error("AI trả về nội dung rỗng:", JSON.stringify(j).slice(0, 600));
+    return info;
+  };
+
+  let res = await run(maxTokens);
+  // Model "suy nghĩ" có thể dùng hết giới hạn token cho phần suy nghĩ ẩn -> thử lại với giới hạn lớn hơn.
+  if (!res.text && res.finish === "length") res = await run(Math.min(maxTokens * 5, 4000));
+  if (!res.text) {
+    throw new Error(
+      `AI trả về nội dung rỗng (finish_reason=${res.finish}, ${res.tokens} token` +
+        (res.reasoning ? ", model đang 'suy nghĩ' nhưng không ra câu trả lời — nên đổi sang model không 'thinking'" : "") + ")",
+    );
   }
-  const j = await r.json().catch(() => ({}));
-  console.log(`AI ${model} status ${r.status} sau ${Date.now() - t0}ms`);
-  if (!r.ok) {
-    console.error("AI trả lỗi:", r.status, JSON.stringify(j).slice(0, 500));
-    throw new Error(`Dịch vụ AI trả lỗi ${r.status}: ${j?.error?.message ?? j?.message ?? "không rõ"}`);
-  }
-  return String(j?.choices?.[0]?.message?.content ?? "").trim();
+  return res.text;
 }
 
 Deno.serve(async (req) => {
@@ -88,7 +113,11 @@ Deno.serve(async (req) => {
       const out: Record<string, unknown> = { ok: true, usedDevice, limitDevice, usedGlobal, limitGlobal };
       if (body.deep) { // thử gọi AI thật một câu ngắn để đo tốc độ / bắt lỗi (không tính vào hạn mức)
         const t0 = Date.now();
-        try { await callAI("Trả lời đúng một từ.", 'Nói "ok".', 8, 30_000); } catch (e) { out.aiError = e instanceof Error ? e.message : String(e); }
+        try {
+          // hỏi một câu giải thích ngắn thật (không chỉ "ok") để phát hiện model trả về rỗng hoặc quá chậm
+          const sample = await callAI("Bạn là gia sư. Trả lời tiếng Việt, tối đa 2 câu.", "Giải thích ngắn gọn vì sao 2 + 2 = 4.", 200, 40_000);
+          out.aiSample = sample.slice(0, 80);
+        } catch (e) { out.aiError = e instanceof Error ? e.message : String(e); }
         out.aiMs = Date.now() - t0;
       }
       return json(out);
@@ -110,7 +139,7 @@ Deno.serve(async (req) => {
       const build = (hint: boolean) =>
         `Câu hỏi: ${str(q.t, 2500)}\n\nCác đáp án:\n${opts.map((o: string) => "- " + o).join("\n")}\n\nĐáp án đúng: ${correct.join(" | ")}\n${hint && q.e ? "Gợi ý có sẵn: " + str(q.e, 400) : ""}`;
       // Nếu dịch vụ AI từ chối vì quá dài (ngữ cảnh/token) thì tự thử lại với yêu cầu gọn hơn.
-      const isLimit = (e: unknown) => /limit|context|token|too (long|large)/i.test(e instanceof Error ? e.message : String(e));
+      const isLimit = (e: unknown) => /^Dịch vụ AI trả lỗi 4\d\d.*(limit|context|token|too (long|large))/i.test(e instanceof Error ? e.message : String(e));
       let text = "";
       try {
         text = await callAI(EXPLAIN_SYSTEM, build(true), 700);
@@ -141,7 +170,7 @@ Deno.serve(async (req) => {
       try {
         out = await callAI(TRANSLATE_SYSTEM, payload, 1200);
       } catch (e) {
-        if (!/limit|context|token|too (long|large)/i.test(e instanceof Error ? e.message : String(e))) throw e;
+        if (!/^Dịch vụ AI trả lỗi 4\d\d.*(limit|context|token|too (long|large))/i.test(e instanceof Error ? e.message : String(e))) throw e;
         out = await callAI(TRANSLATE_SYSTEM, payload, 700);
       }
       const m = out.match(/\{[\s\S]*\}/);
