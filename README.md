@@ -33,6 +33,26 @@ Push cả thư mục này lên repo → Settings → Pages → Deploy from branc
 - Môn khác: bấm vào môn → **Nhập ngân hàng câu hỏi** (`.docx`/`.txt`/`.json`), hoặc chạy `build-bank.js` với mã môn khác rồi thêm `<script src="data/<mã>.js">` vào `index.html`.
 - Định dạng file: `Question N: [ID: …] …`, các dòng `A. …`, `Answer: B`, `Explanation: …`, dòng `Vietnamese: …` ngay dưới mỗi mục để có bản dịch.
 
+## Bản dịch tiếng Việt (tự động + dịch hàng loạt)
+
+Nút **VI** hiện bản dịch nhỏ dưới tiếng Anh. Với câu thiếu bản dịch, AI **tự dịch đúng phần còn thiếu**:
+- Chỉ dịch cái thiếu: nếu đã có dịch câu hỏi mà thiếu đáp án thì chỉ gửi các đáp án thiếu. Câu đã đủ dịch thì **không gọi AI**. Bỏ qua số, mẫu bit, công thức, mã, và văn bản đã là tiếng Việt.
+- Gộp tối đa 4 câu mỗi lần gọi, dịch trước câu đang làm và 4 câu kế tiếp nên chuyển câu không phải chờ.
+- Dịch xong **lưu lại** (dùng chung khi bật Supabase, hoặc lưu trên máy nếu tự nhập API key) nên không dịch lại.
+- Định dạng trao đổi với AI là văn bản có nhãn (`[Q1]` / `T:` / `A:`), không dùng JSON nên không còn lỗi "không đúng định dạng".
+- Tắt nút VI thì không gọi AI. Gặp lỗi (hết lượt, sai mã) thì tạm dừng 2 phút và hiện nút để thử lại.
+
+**Dịch hàng loạt một lần** (khuyên dùng, để mọi người có bản dịch sẵn, không tốn lượt AI lúc dùng): chạy trên máy bạn, ghi thẳng bản dịch vào `data/*.js`. API key đặt qua biến môi trường, **không** ghi vào file.
+```powershell
+$env:AI_BASE  = "https://api.xah.io/v1"
+$env:AI_KEY   = "sk-..."
+$env:AI_MODEL = "tên-model-không-thinking"
+node tools/translate-bank.js --dry                      # chỉ đếm, không gọi AI
+node tools/translate-bank.js --only CEA201 --limit 20   # thử 20 câu trước, kiểm tra chất lượng
+node tools/translate-bank.js                            # dịch toàn bộ phần còn thiếu
+```
+Chạy lại hoặc ngắt (Ctrl+C) lúc nào cũng được, lần sau chỉ dịch phần còn lại. Dịch xong nhớ `git commit` và `git push`.
+
 ## AI dùng chung + giải thích dùng chung (Supabase, tuỳ chọn)
 
 Mặc định mỗi người tự nhập API key AI trong ⚙ Cài đặt và giải thích chỉ lưu trong trình duyệt của người đó. Bật Supabase (miễn phí) để:

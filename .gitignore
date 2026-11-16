@@ -7,3 +7,6 @@ fe-study-backup-*.json
 
 # nguồn dữ liệu cũ (app khác, có file .bat/server) — chỉ dùng để chuyển đổi, không đưa lên GitHub
 Nguon_de_thi_on_tap_5_mon_FE/
+tools/.translate-done.json
+tools/*.tmp
+data/*.tmp

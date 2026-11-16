@@ -15,8 +15,58 @@ const str = (v: unknown, max: number) => String(v ?? "").slice(0, max);
 
 const EXPLAIN_SYSTEM =
   'Bạn là gia sư ôn thi trắc nghiệm đại học. Trả lời bằng tiếng Việt, giữ nguyên thuật ngữ tiếng Anh. KHÔNG dùng chữ cái A/B/C/D để chỉ đáp án (thứ tự đáp án bị xáo trộn) — hãy nêu nội dung đáp án. Định dạng gọn: "**Đáp án đúng:** …", "**Vì sao đúng:** …" (1–3 câu), "**Các đáp án còn lại sai ở đâu:**" (gạch đầu dòng, mỗi ý một dòng ngắn), "**Mẹo nhớ:** …" (1 câu). Tối đa khoảng 200 từ.';
-const TRANSLATE_SYSTEM =
-  'Dịch đề thi trắc nghiệm sang tiếng Việt, ngắn gọn, giữ nguyên thuật ngữ chuyên ngành/mã/biểu thức. Chỉ trả về MỘT đối tượng JSON hợp lệ dạng {"t":"…","o":{"A":"…","B":"…"}}, không thêm chữ nào khác.';
+// ---- Dịch Anh → Việt theo lô. Định dạng văn bản có nhãn (giống assets/translate-core.js), KHÔNG dùng JSON. ----
+const TRANSLATE_SYSTEM = [
+  "Bạn là biên dịch viên đề thi trắc nghiệm đại học (Anh → Việt).",
+  "Quy tắc:",
+  "- Dịch tự nhiên, ngắn gọn, đúng thuật ngữ chuyên ngành. Thuật ngữ tiếng Anh thông dụng có thể để nguyên.",
+  "- GIỮ NGUYÊN mã nguồn, biểu thức, câu lệnh, tên hàm/biến, số và ký hiệu (chỉ dịch phần lời văn xung quanh).",
+  "- Không giải thích, không bình luận, không dùng markdown hay dấu ```.",
+  '- Mỗi mục đầu vào bắt đầu bằng "[Qn]", sau đó là các dòng "T: …" (câu hỏi) và "A: …", "B: …" (đáp án).',
+  "- Trả về ĐÚNG các mục và ĐÚNG các nhãn đã nhận, theo định dạng y hệt, ví dụ:",
+  "[Q1]",
+  "T: bản dịch câu hỏi",
+  "A: bản dịch đáp án A",
+  "[Q2]",
+  "B: bản dịch đáp án B",
+].join("\n");
+
+type TrData = { t?: string; o?: Record<string, string> };
+type TrAsk = { key: string; t?: string; o: Record<string, string> };
+
+function buildTrUser(items: TrAsk[]): string {
+  return items.map((it, i) => {
+    const L = ["[Q" + (i + 1) + "]"];
+    if (it.t !== undefined) L.push("T: " + it.t);
+    Object.entries(it.o).forEach(([k, v]) => L.push(k + ": " + v));
+    return L.join("\n");
+  }).join("\n\n");
+}
+
+// Đọc câu trả lời của AI -> mảng { t?, o } đúng thứ tự các mục đã gửi (mục thiếu thì rỗng).
+function parseTr(text: string, count: number): Array<{ t?: string; o: Record<string, string> }> {
+  const res: Array<{ t?: string; o: Record<string, string> }> = Array.from({ length: count }, () => ({ o: {} }));
+  let cur: { t?: string; o: Record<string, string> } | null = null;
+  let fld: string | null = null;
+  let buf: string[] = [];
+  const flush = () => {
+    if (cur && fld) {
+      const v = buf.join("\n").trim();
+      if (v) { if (fld === "T") cur.t = v; else cur.o[fld] = v; }
+    }
+    buf = []; fld = null;
+  };
+  for (const line of String(text ?? "").replace(/\r/g, "").replace(/```[a-z]*/gi, "").split("\n")) {
+    let m = line.match(/^\s*\*{0,2}\[Q(\d+)\]\*{0,2}\s*$/i);
+    if (m) { flush(); cur = res[+m[1] - 1] ?? null; continue; }
+    if (!cur) continue;
+    m = line.match(/^\s*\*{0,2}(T|[A-H])\*{0,2}\s*[:：]\*{0,2}\s?(.*)$/);
+    if (m) { flush(); fld = m[1]; buf = [m[2]]; continue; }
+    if (fld) buf.push(line);
+  }
+  flush();
+  return res;
+}
 
 async function callAI(system: string, user: string, maxTokens = 700, timeoutMs = 60_000): Promise<string> {
   const base = (Deno.env.get("AI_BASE") ?? "").replace(/\/$/, "");
@@ -122,10 +172,10 @@ Deno.serve(async (req) => {
     const { data: urows } = await admin.from("ai_usage").select("scope,n").eq("day", day).in("scope", ["global", "dev:" + device]);
     const usedOf = (s: string) => (urows ?? []).find((r: { scope: string; n: number }) => r.scope === s)?.n ?? 0;
     const usedDevice = usedOf("dev:" + device), usedGlobal = usedOf("global");
-    const bump = async () => {
+    const bump = async (n = 1) => {
       await admin.from("ai_usage").upsert([
-        { scope: "dev:" + device, day, n: usedDevice + 1 },
-        { scope: "global", day, n: usedGlobal + 1 },
+        { scope: "dev:" + device, day, n: usedDevice + n },
+        { scope: "global", day, n: usedGlobal + n },
       ]);
     };
     const checkQuota = (): Response | null => {
@@ -149,9 +199,80 @@ Deno.serve(async (req) => {
       return json(out);
     }
 
+    const author = str(body.name, 24).trim() || "ẩn danh";
+
+    // ---- dịch theo lô (tối đa 5 câu/lần), chỉ những phần còn thiếu; gộp vào bản dịch đã lưu ----
+    if (action === "translate") {
+      const items: TrAsk[] = (Array.isArray(body.items) ? body.items : []).slice(0, 5).map((x: Record<string, unknown>) => {
+        const o: Record<string, string> = {};
+        Object.entries((x.o ?? {}) as Record<string, unknown>).slice(0, 8).forEach(([k, v]) => { if (/^[A-H]$/.test(k)) o[k] = str(v, 700); });
+        return { key: str(x.key, 200), t: x.t == null ? undefined : str(x.t, 2500), o };
+      }).filter((it: TrAsk) => it.key && (it.t !== undefined || Object.keys(it.o).length));
+      if (!items.length) return json({ error: "Thiếu nội dung cần dịch" }, 400);
+
+      const { data: rows } = await admin.from("translations").select("key,data,author,ts").in("key", items.map((i) => i.key));
+      const have = new Map<string, { data: TrData; author: string; ts: number }>((rows ?? []).map((r: { key: string; data: TrData; author: string; ts: number }) => [r.key, r]));
+      const results: Record<string, unknown> = {};
+      const todo: { it: TrAsk; ex: TrData; ask: TrAsk }[] = [];
+      for (const it of items) {
+        const old = have.get(it.key);
+        const ex: TrData = old?.data ?? {};
+        const ask: TrAsk = {
+          key: it.key,
+          t: it.t !== undefined && !ex.t ? it.t : undefined,
+          o: Object.fromEntries(Object.entries(it.o).filter(([k]) => !(ex.o && ex.o[k]))),
+        };
+        if (ask.t === undefined && !Object.keys(ask.o).length) { if (old) results[it.key] = { data: old.data, author: old.author, ts: old.ts }; }
+        else todo.push({ it, ex, ask });
+      }
+
+      const failed: string[] = [];
+      if (todo.length) {
+        const blocked = checkQuota(); if (blocked) return blocked;
+        let calls = 0;
+        const isLimit = (e: unknown) => /^Dịch vụ AI trả lỗi 4\d\d.*(limit|context|token|too (long|large))/i.test(e instanceof Error ? e.message : String(e));
+        // Nếu dịch vụ AI từ chối vì quá dài thì chia đôi lô rồi thử lại.
+        const translateMany = async (list: typeof todo): Promise<Array<{ t?: string; o: Record<string, string> }>> => {
+          const total = list.reduce((n, x) => n + (x.ask.t?.length ?? 0) + Object.values(x.ask.o).join("").length, 0);
+          try {
+            calls++;
+            const text = await callAI(TRANSLATE_SYSTEM, buildTrUser(list.map((x) => x.ask)), Math.min(4000, Math.max(600, Math.ceil(total * 0.9))), 60_000);
+            return parseTr(text, list.length);
+          } catch (e) {
+            if (list.length > 1 && isLimit(e)) {
+              const mid = Math.ceil(list.length / 2);
+              return [...(await translateMany(list.slice(0, mid))), ...(await translateMany(list.slice(mid)))];
+            }
+            throw e;
+          }
+        };
+        const out = await translateMany(todo);
+        for (let i = 0; i < todo.length; i++) {
+          const { it, ex, ask } = todo[i];
+          const r = out[i];
+          const add: { t?: string; o: Record<string, string> } = { o: {} };
+          if (ask.t !== undefined && r.t) add.t = r.t;
+          for (const k of Object.keys(ask.o)) if (r.o[k]) add.o[k] = r.o[k];
+          if (add.t === undefined && !Object.keys(add.o).length) {
+            failed.push(it.key);
+            const old = have.get(it.key);
+            if (old) results[it.key] = { data: old.data, author: old.author, ts: old.ts };
+            continue;
+          }
+          const data: TrData = { o: { ...(ex.o ?? {}), ...add.o } };
+          const t = add.t ?? ex.t;
+          if (t) data.t = t;
+          const row = { key: it.key, data, author, ts: Date.now() };
+          await admin.from("translations").upsert(row);
+          results[it.key] = { data, author, ts: row.ts };
+        }
+        await bump(calls);
+      }
+      return json({ results, failed });
+    }
+
     const key = str(body.key, 200);
     if (!key) return json({ error: "Thiếu key câu hỏi" }, 400);
-    const author = str(body.name, 24).trim() || "ẩn danh";
     const q = body.q ?? {};
 
     if (action === "explain") {
@@ -183,29 +304,6 @@ Deno.serve(async (req) => {
       await admin.from("explanations").upsert(row);
       await bump();
       return json({ cached: false, text, author, model: row.model, ts: row.ts });
-    }
-
-    if (action === "translate") {
-      const { data: c } = await admin.from("translations").select("data,author,ts").eq("key", key).maybeSingle();
-      if (c) return json({ cached: true, data: c.data, author: c.author, ts: c.ts });
-      const blocked = checkQuota(); if (blocked) return blocked;
-      const o: Record<string, string> = {};
-      Object.entries(q.o ?? {}).slice(0, 10).forEach(([k, v]) => { o[str(k, 2)] = str(v, 600); });
-      const payload = JSON.stringify({ t: str(q.t, 2500), o });
-      let out = "";
-      try {
-        out = await callAI(TRANSLATE_SYSTEM, payload, 1200);
-      } catch (e) {
-        if (!/^Dịch vụ AI trả lỗi 4\d\d.*(limit|context|token|too (long|large))/i.test(e instanceof Error ? e.message : String(e))) throw e;
-        out = await callAI(TRANSLATE_SYSTEM, payload, 700);
-      }
-      const m = out.match(/\{[\s\S]*\}/);
-      if (!m) return json({ error: "AI trả về không đúng định dạng" }, 502);
-      const data = JSON.parse(m[0]);
-      const row = { key, data, author, ts: Date.now() };
-      await admin.from("translations").upsert(row);
-      await bump();
-      return json({ cached: false, data, author, ts: row.ts });
     }
 
     return json({ error: "Hành động không hợp lệ" }, 400);

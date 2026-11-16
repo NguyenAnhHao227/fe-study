@@ -67,7 +67,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) DB.fl
 
 /* ============ hồ sơ ============ */
 let PROFILE = null;
-const ui = { manage: false, rf: 'all', aiShown: new Set(), aiBusy: {}, aiErr: {}, trBusy: {} };
+const ui = { manage: false, rf: 'all', aiShown: new Set(), aiBusy: {}, aiErr: {}, trBusy: {}, trTried: {}, trWant: new Set(), trPause: null, trRunning: false };
+const TR = window.FETranslate;
 const listProfiles = () => DB.get('profiles', []).map(id => DB.get('p:' + id)).filter(Boolean);
 const save = () => { if (PROFILE) DB.set('p:' + PROFILE.id, PROFILE); };
 function createProfile(name) {
@@ -102,6 +103,7 @@ async function loadShared() { // tải toàn bộ giải thích/bản dịch dù
     };
     await grab('explanations', 'key,text,author,model,ts', r => { CLOUD.expl[r.key] = { t: r.text, by: r.author, m: r.model, ts: r.ts }; });
     await grab('translations', 'key,data,author,ts', r => { CLOUD.tr[r.key] = { ...r.data, by: r.author, ts: r.ts }; });
+    trInvalidate();
   } catch (e) { console.warn('shared', e); }
 }
 const deviceId = () => { let d = DB.get('device'); if (!d) { d = uid() + uid(); DB.set('device', d); } return d; };
@@ -192,16 +194,17 @@ const AI = {
     const user = `Câu hỏi: ${q.t}\n\nCác đáp án:\n${q.o.map(o => '- ' + o[1]).join('\n')}\n\nĐáp án đúng: ${right.join(' | ')}\n${q.e ? 'Gợi ý có sẵn: ' + q.e : ''}`;
     return this.call(system, user, 900);
   },
-  async translate(q) {
-    const system = 'Dịch đề thi trắc nghiệm sang tiếng Việt, ngắn gọn, giữ nguyên thuật ngữ chuyên ngành/mã/biểu thức. Chỉ trả về MỘT đối tượng JSON hợp lệ dạng {"t":"…","o":{"A":"…","B":"…"}}, không thêm chữ nào khác.';
-    const user = JSON.stringify({ t: q.t, o: Object.fromEntries(q.o.map(o => [o[0], o[1]])) });
-    const out = await this.call(system, user, 1200);
-    const m = out.match(/\{[\s\S]*\}/); if (!m) throw new Error('AI trả về không đúng định dạng');
-    return JSON.parse(m[0]);
-  },
 };
 const explCache = () => Object.assign({}, window.SEED_EXPL || {}, DB.get('expl', {}), CLOUD.expl);
-const trCache = () => Object.assign({}, DB.get('tr', {}), CLOUD.tr);
+/* Bản dịch AI đã lưu (máy này + dùng chung), gộp từng phần theo câu; nhớ tạm cho đến khi có thay đổi. */
+let trMemo = null;
+const trInvalidate = () => { trMemo = null; };
+function trCache() {
+  if (trMemo) return trMemo;
+  const a = DB.get('tr', {}), b = CLOUD.tr, out = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) out[k] = TR.mergeTr(a[k], b[k]);
+  return trMemo = out;
+}
 
 function md(s) {
   const lines = esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').split('\n');
@@ -361,7 +364,8 @@ function viewSubject(code) {
 /* ---- thẻ câu hỏi (dùng cho làm bài và xem lại) ---- */
 function qCard(code, q, it, o) {
   const vi = PROFILE.settings.vi, key = qkey(code, q.id), tr = trCache()[key] || {};
-  const tvRaw = q.tv || tr.t || '', tv = same(tvRaw, q.t) ? '' : tvRaw, multi = q.a.length > 1, d = subjData(code), b = getBank(code);
+  const tvRaw = TR.real(q.tv, q.t) ? q.tv : (tr.t || ''), tv = same(tvRaw, q.t) ? '' : tvRaw, multi = q.a.length > 1, d = subjData(code), b = getBank(code);
+  const miss = vi ? TR.missing(q, tr) : null;
   const sel = new Set([...(it.pick || '').split(''), ...(o.reveal ? [] : it.sel || [])]);
   const opts = it.ord.map((k, pos) => {
     const op = q.o.find(x => x[0] === k); if (!op) return '';
@@ -369,7 +373,7 @@ function qCard(code, q, it, o) {
     let cls = '', mk = '';
     if (o.reveal) { if (right) { cls = 'ok'; mk = '✓'; } else if (picked) { cls = 'bad'; mk = '✗'; } else cls = 'dim'; }
     else if (sel.has(k)) cls = 'sel';
-    const ovRaw = op[2] || (tr.o && tr.o[k]) || '', ov = same(ovRaw, op[1]) ? '' : ovRaw;
+    const ovRaw = TR.real(op[2], op[1]) ? op[2] : ((tr.o && tr.o[k]) || ''), ov = same(ovRaw, op[1]) ? '' : ovRaw;
     return `<li><button class="opt ${cls}" data-act="pick" data-k="${k}" ${o.reveal || !o.interactive ? 'disabled' : ''}>
       <span class="ltr">${LETTERS[pos]}</span><span class="otxt"><span class="o-en">${esc(op[1])}</span>${vi && ov ? `<div class="o-vi">${esc(ov)}</div>` : ''}</span><span class="mk">${mk}</span></button></li>`;
   }).join('');
@@ -384,7 +388,7 @@ function qCard(code, q, it, o) {
       <span class="tools">${o.interactive ? `<button class="tg ${it.flag ? 'on' : ''}" data-act="flag" title="Đánh dấu xem lại (M)">⚑ Xem lại</button>` : ''}<button class="tg ${star ? 'on' : ''}" data-act="star" data-key="${esc(key)}" title="Lưu vào hộp đánh dấu">${star ? '★' : '☆'} Lưu</button></span></div>
     <div class="q-en">${esc(q.t)}</div>
     ${vi && tv ? `<div class="q-vi">${esc(tv)}</div>` : ''}
-    ${vi && !tvRaw ? `<div class="sm" style="margin-top:8px">${ui.trBusy[key] ? '<span class="spin"></span>Đang dịch…' : `<button class="link" data-act="translate" data-key="${esc(key)}">🌐 Dịch câu này bằng AI</button>`}</div>` : ''}
+    ${miss && !TR.isEmpty(miss) ? `<div class="sm trline">${trStatus(key, miss)}</div>` : ''}
     ${multi ? `<div class="sm muted" style="margin-top:10px">Câu này chọn <b>nhiều</b> đáp án.</div>` : ''}
     <ul class="opts">${opts}</ul>
     ${multi && o.interactive && o.instant && !o.reveal ? `<div class="nav"><button class="btn pri" data-act="confirm-multi" ${(it.sel || []).length ? '' : 'disabled'}>Xác nhận đáp án</button></div>` : ''}
@@ -435,18 +439,82 @@ async function aiExplain(key, force) {
   } catch (e) { ui.aiErr[key] = e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ ở góc trên để cài đặt.' : e.message === 'CODE' ? 'Mã truy cập không đúng — bấm lại để nhập mã.' : 'Lỗi AI: ' + e.message; }
   delete ui.aiBusy[key]; refreshAI(key);
 }
-async function aiTranslate(key) {
-  const [code, id] = splitKey(key), q = getBank(code).idx.get(id);
-  if (CLOUD.on && !await ensureCode()) return;
-  ui.trBusy[key] = 1; render(true);
-  try {
-    if (CLOUD.on) {
-      const j = await cloudAI({ action: 'translate', key, q: { t: q.t, o: Object.fromEntries(q.o.map(o => [o[0], o[1]])) } });
-      CLOUD.tr[key] = { ...j.data, by: j.author, ts: j.ts };
-    } else { const r = await AI.translate(q); const tr = DB.get('tr', {}); tr[key] = { t: r.t || '', o: r.o || {}, by: PROFILE.name, ts: Date.now() }; DB.set('tr', tr); }
+/* ---- Dịch AI chủ động: chỉ dịch phần còn thiếu (câu hỏi và/hoặc từng đáp án), gộp tối đa 4 câu mỗi lần gọi,
+ *      dịch trước các câu sắp tới, lưu lại (dùng chung khi bật máy chủ) nên không dịch lại lần sau. ---- */
+const trAutoOK = () => CLOUD.on ? !!DB.get('code') : !!AI.cfg().key; // chỉ tự chạy khi đã có mã truy cập / API key
+function trStatus(key, miss) { // dòng trạng thái nhỏ dưới câu hỏi
+  const what = TR.describe(miss), btn = label => `<button class="link" data-act="translate" data-key="${esc(key)}">${label}</button>`;
+  if (ui.trBusy[key]) return `<span class="spin"></span>Đang dịch phần còn thiếu (${what})…`;
+  if (ui.trPause && ui.trPause.until > Date.now()) return `${btn('🌐 Dịch phần còn thiếu')} <span class="muted">· ${esc(ui.trPause.msg)}</span>`;
+  if (ui.trTried[key]) return `${btn('🌐 Dịch lại phần còn thiếu')} <span class="muted">(${what})</span>`;
+  if (!trAutoOK()) return `${btn('🌐 Dịch phần còn thiếu bằng AI')} <span class="muted">(${what})</span>`;
+  return `<span class="spin"></span>Chuẩn bị dịch (${what})…`;
+}
+function trTargets() { // các câu cần dịch ngay: yêu cầu bấm tay + câu đang làm và 4 câu kế tiếp (hoặc 8 câu đầu ở màn xem lại)
+  if (!PROFILE || !PROFILE.settings.vi) return [];
+  const r = route(), out = [], seen = new Set();
+  const add = (code, q, force) => {
+    const key = qkey(code, q.id);
+    if (seen.has(key) || ui.trBusy[key] || (!force && ui.trTried[key])) return;
+    const m = TR.missing(q, trCache()[key]); if (TR.isEmpty(m)) return;
+    seen.add(key); out.push({ key, q, miss: m });
+  };
+  for (const key of [...ui.trWant]) { const [code, id] = splitKey(key), q = getBank(code).idx.get(id); if (q) add(code, q, true); else ui.trWant.delete(key); }
+  if (r.name === 'exam' && PROFILE.active) {
+    const S = PROFILE.active, b = getBank(S.subj);
+    for (let i = S.i; i < Math.min(S.items.length, S.i + 5); i++) { const q = b.idx.get(S.items[i].id); if (q) add(S.subj, q); }
+  } else if (r.name === 'result') {
+    const S = PROFILE.sessions.find(s => s.id === r.arg);
+    if (S) {
+      const b = getBank(S.subj), rf = ui.rf;
+      S.items.filter(it => rf === 'all' || (rf === 'wrong' && it.ok === false) || (rf === 'skip' && it.ok === null) || (rf === 'ok' && it.ok === true))
+        .slice(0, 8).forEach(it => { const q = b.idx.get(it.id); if (q) add(S.subj, q); });
+    }
   }
-  catch (e) { toast(e.message === 'NOKEY' ? 'Chưa cài API key — bấm ⚙ để cài đặt.' : e.message === 'CODE' ? 'Mã truy cập không đúng' : 'Lỗi dịch: ' + e.message); }
-  delete ui.trBusy[key]; render(true);
+  return out;
+}
+async function translateEntries(entries) { // gọi AI một lần cho cả lô, rồi lưu bản dịch
+  const items = entries.map(e => ({ key: e.key, t: e.miss.t ? e.q.t : undefined, o: Object.fromEntries(e.miss.o.map(k => [k, e.q.o.find(o => o[0] === k)[1]])) }));
+  if (CLOUD.on) {
+    const j = await cloudAI({ action: 'translate', items });
+    for (const [key, r] of Object.entries(j.results || {})) CLOUD.tr[key] = TR.mergeTr(CLOUD.tr[key], { ...r.data, by: r.author, ts: r.ts });
+  } else {
+    const many = async list => { // nếu dịch vụ AI báo "quá dài" thì chia đôi lô rồi thử lại
+      const total = list.reduce((n, it) => n + (it.t || '').length + Object.values(it.o).join('').length, 0);
+      try { return TR.parse(await AI.call(TR.SYSTEM, TR.buildUser(list), Math.min(4000, Math.max(600, Math.ceil(total * 0.9)))), list.length); }
+      catch (e) {
+        if (list.length > 1 && /limit|context|token|too (long|large)/i.test(String(e.message || ''))) { const mid = Math.ceil(list.length / 2); return [...await many(list.slice(0, mid)), ...await many(list.slice(mid))]; }
+        throw e;
+      }
+    };
+    const out = await many(items);
+    const tr = DB.get('tr', {}); let got = 0;
+    items.forEach((it, i) => { const r = out[i]; if (r.t || Object.keys(r.o).length) { tr[it.key] = TR.mergeTr(tr[it.key], { ...r, by: PROFILE.name, ts: Date.now() }); got++; } });
+    if (!got) throw new Error('AI trả về không đọc được bản dịch');
+    DB.set('tr', tr);
+  }
+  trInvalidate();
+}
+let trTimer = null;
+const scheduleTranslate = () => { clearTimeout(trTimer); trTimer = setTimeout(pumpTranslate, 120); };
+async function pumpTranslate() {
+  if (ui.trRunning || !PROFILE) return;
+  if (!ui.trWant.size && (!trAutoOK() || (ui.trPause && ui.trPause.until > Date.now()))) return;
+  const batch = trTargets().slice(0, 4); if (!batch.length) return;
+  ui.trRunning = true; batch.forEach(x => { ui.trBusy[x.key] = 1; }); render(true);
+  let softFail = false;
+  try { await translateEntries(batch); ui.trPause = null; }
+  catch (e) {
+    const m = String(e.message || e);
+    softFail = m === 'CODE' || m === 'NOKEY' || /hết lượt|quá lâu|kết nối|Failed to fetch/i.test(m); // lỗi tạm: tự thử lại sau, không đánh dấu "đã thử"
+    ui.trPause = { msg: m === 'CODE' ? 'mã truy cập không đúng' : m === 'NOKEY' ? 'chưa cài API key' : 'lỗi dịch: ' + m.slice(0, 90), until: Date.now() + 120000 };
+  }
+  batch.forEach(x => { delete ui.trBusy[x.key]; ui.trWant.delete(x.key); if (!softFail) ui.trTried[x.key] = 1; });
+  ui.trRunning = false; render(true);
+}
+async function translateNow(key) { // bấm tay: dịch (lại) phần còn thiếu của một câu
+  if (CLOUD.on ? !await ensureCode() : !AI.cfg().key) { if (!CLOUD.on) toast('Chưa cài API key — bấm ⚙ để cài đặt.'); return; }
+  ui.trPause = null; delete ui.trTried[key]; ui.trWant.add(key); render(true);
 }
 
 /* ---- màn hình làm bài ---- */
@@ -592,6 +660,7 @@ function render(keep) {
   if (r.name !== 'exam') stopTimer();
   app.innerHTML = html;
   if (['home', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
+  if (PROFILE && PROFILE.settings.vi && (r.name === 'exam' || r.name === 'result')) scheduleTranslate(); // dịch AI chủ động phần còn thiếu
   window.scrollTo(0, y);
   if (r.name === 'exam') startTimer();
   document.title = (r.name === 'exam' ? PROFILE.active.subj + ' · ' : '') + 'FE Study';
@@ -781,7 +850,7 @@ const A = {
   'leave-exam': () => { save(); go('#/s/' + PROFILE.active.subj); },
   ai: el => aiExplain(el.dataset.key, false),
   'ai-regen': async el => { if (await confirmBox('Tạo lại giải thích?', 'Giải thích mới sẽ <b>thay thế</b> bản đã lưu cho tất cả mọi người dùng chung.', 'Tạo lại')) aiExplain(el.dataset.key, true); },
-  translate: el => aiTranslate(el.dataset.key),
+  translate: el => translateNow(el.dataset.key),
 };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
