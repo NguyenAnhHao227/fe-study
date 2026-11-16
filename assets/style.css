@@ -164,6 +164,20 @@ code{background:var(--line);padding:1px 5px;border-radius:5px;font-size:.9em}
 .expl{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg)}
 .expl h4{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
 .expl .e-en{font-size:.97rem}
+.bell{position:relative}
+.bell-dot{position:absolute;top:5px;right:5px;width:10px;height:10px;border-radius:50%;background:var(--bad);border:2px solid var(--bg)}
+.who{position:relative}
+.who-bell{position:absolute;top:14px;right:14px}
+.upd-modal{max-width:640px}
+.upd-modal h3{font-size:1.5rem;margin-bottom:4px}
+.upd-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.upd{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg)}
+.upd.old{opacity:.82}
+.upd-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.upd-h b{font-size:1.05rem}
+.upd ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.upd li{display:flex;gap:10px;font-size:.95rem;line-height:1.45}
+.upd li .ic{flex:none;width:1.6em;text-align:center}
 .expl .e-en{white-space:pre-line}
 .trline{margin-top:8px;color:var(--vi)}
 .aibox{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}

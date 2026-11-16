@@ -222,16 +222,16 @@ function toast(msg) {
   const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
   $('#toasts').appendChild(t); setTimeout(() => t.remove(), 3200);
 }
-function modal(html, { dismiss = true, onMount } = {}) {
+function modal(html, { dismiss = true, onMount, cls = '' } = {}) {
   return new Promise(res => {
     const ov = document.createElement('div'); ov.className = 'ov';
-    ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+    ov.innerHTML = `<div class="modal ${cls}" role="dialog" aria-modal="true">${html}</div>`;
     const el = $('.modal', ov);
     const close = v => { ov.remove(); res({ v, el }); };
     ov.addEventListener('click', e => { if (e.target === ov && dismiss) return close(null); const b = e.target.closest('[data-m]'); if (b) close(b.dataset.m); });
     ov.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')) { const b = $('[data-m="ok"]', ov); if (b) b.click(); } if (e.key === 'Escape' && dismiss) close(null); });
     document.body.appendChild(ov);
-    (el.querySelector('[autofocus]') || el.querySelector('input,button')).focus();
+    (el.querySelector('[autofocus]') || el.querySelector('input,button')).focus({ preventScroll: true }); // giữ nguyên đầu hộp thoại, không tự cuộn xuống nút
     onMount && onMount(el, close);
   });
 }
@@ -252,11 +252,47 @@ function pickFile(accept) {
 }
 const go = h => { if (location.hash === h) render(); else location.hash = h; };
 
+/* ============ thông báo cập nhật ("Có gì mới") ============
+ * Nội dung ở data/changelog.js. Mỗi thiết bị thấy thông báo lớn đúng MỘT lần cho mỗi đợt cập nhật mới;
+ * sau đó chuông 🔔 ở góc trên bên phải mở lại lịch sử (có chấm đỏ khi còn tin chưa đọc). */
+const updList = () => window.CHANGELOG || [];
+function unseenUpdates() { // các mục mới hơn mục đã đọc gần nhất (danh sách xếp mới nhất trước)
+  const list = updList(), i = list.findIndex(u => u.id === DB.get('seenUpd', null));
+  return i < 0 ? list : list.slice(0, i);
+}
+const bellBtn = () => `<button class="icon-btn bell" data-act="updates" title="Có gì mới" aria-label="Thông báo cập nhật">🔔${unseenUpdates().length ? '<i class="bell-dot"></i>' : ''}</button>`;
+function updatesHTML(entries, all, fresh) {
+  return `<h3>${all ? '🔔 Lịch sử cập nhật' : '🎉 Có gì mới'}</h3>
+    <div class="muted sm">${all ? 'Các thay đổi gần đây của FE Study.' : 'FE Study vừa được cập nhật. Đây là những điểm mới:'}</div>
+    <div class="upd-list">${entries.map((u, i) => `<section class="upd ${all && !fresh.has(u.id) ? 'old' : ''}">
+      <div class="upd-h"><b>${esc(u.title)}</b>${all && fresh.has(u.id) ? '<span class="pill ok">Mới</span>' : ''}<span class="grow"></span><span class="muted sm">${esc(u.date)}</span></div>
+      <ul>${u.items.map(it => `<li><span class="ic">${esc(it.icon || '•')}</span><span>${esc(it.text)}</span></li>`).join('')}</ul></section>`).join('')}</div>
+    <div class="acts"><button class="btn pri" data-m="ok" autofocus>${all ? 'Đóng' : 'Đã hiểu'}</button></div>`;
+}
+async function showUpdates(all) {
+  const list = updList(); if (!list.length) return;
+  const fresh = new Set(unseenUpdates().map(u => u.id)), entries = all ? list : unseenUpdates().slice(0, 3);
+  if (!entries.length) return;
+  await modal(updatesHTML(entries, all, fresh), { cls: 'upd-modal' });
+  DB.set('seenUpd', list[0].id); // đã xem -> không hiện lại; chuông chỉ còn là lịch sử
+  $$('.bell-dot').forEach(e => e.remove());
+}
+function maybeAnnounce() { // gọi sau mỗi lần vẽ trang; không làm phiền khi đang làm bài hoặc đang mở hộp thoại khác
+  if (ui.updAnnounced || !updList().length || route().name === 'exam' || $('.ov')) return;
+  ui.updAnnounced = true;
+  if (!unseenUpdates().length) return;
+  if (DB.get('seenUpd', null) == null && !listProfiles().length) { // thiết bị hoàn toàn mới: không cần báo "có gì mới"
+    DB.set('seenUpd', updList()[0].id); $$('.bell-dot').forEach(e => e.remove()); return;
+  }
+  showUpdates(false);
+}
+
 /* ============ khung trang ============ */
 function topbar() {
   return `<header class="topbar"><div class="wrap">
     <button class="brand" data-act="home"><i>FE</i><span class="bt">FE Study</span></button><span class="grow"></span>
     <button class="chip-user" data-act="who" title="Đổi người dùng"><span class="av" style="background:${PROFILE.color}">${esc(initial(PROFILE.name))}</span>${esc(PROFILE.name)}</button>
+    ${bellBtn()}
     <button class="icon-btn" data-act="theme" title="Sáng / tối">◐</button>
     <button class="icon-btn" data-act="settings" title="Cài đặt AI & sao lưu">⚙</button>
   </div></header>`;
@@ -264,7 +300,7 @@ function topbar() {
 
 function viewWho() {
   const ps = listProfiles();
-  return `<section class="who"><h1>Ai đang ôn thi?</h1>
+  return `<section class="who"><div class="who-bell">${bellBtn()}</div><h1>Ai đang ôn thi?</h1>
     <p class="muted">Chọn hồ sơ của bạn. Tiến độ, câu sai và lịch sử làm bài được lưu riêng cho từng người.</p>
     <div class="tiles">
       ${ps.map(p => `<div class="tile" role="button" tabindex="0" data-act="pick-profile" data-id="${p.id}">
@@ -661,6 +697,7 @@ function render(keep) {
   app.innerHTML = html;
   if (['home', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
   if (PROFILE && PROFILE.settings.vi && (r.name === 'exam' || r.name === 'result')) scheduleTranslate(); // dịch AI chủ động phần còn thiếu
+  if (r.name !== 'exam') setTimeout(maybeAnnounce, 450); // thông báo "Có gì mới" (đúng một lần)
   window.scrollTo(0, y);
   if (r.name === 'exam') startTimer();
   document.title = (r.name === 'exam' ? PROFILE.active.subj + ' · ' : '') + 'FE Study';
@@ -749,7 +786,7 @@ async function openSettings() {
 const stamp = () => new Date().toISOString().slice(0, 10);
 function exportAll() {
   const out = { app: 'fe-study', v: 1, ts: Date.now(), data: {} };
-  DB.mem.forEach((v, k) => { if (!['api', 'cur', 'code', 'device', 'trk'].includes(k)) out.data[k] = v; });
+  DB.mem.forEach((v, k) => { if (!['api', 'cur', 'code', 'device', 'trk', 'seenUpd'].includes(k)) out.data[k] = v; });
   download(`fe-study-backup-${stamp()}.json`, JSON.stringify(out)); toast('Đã xuất file sao lưu');
 }
 function exportSeed() {
@@ -789,6 +826,7 @@ const A = {
     de.dataset.theme = nt; try { localStorage.setItem('fe-theme', nt); } catch (_) {}
   },
   settings: () => openSettings(),
+  updates: () => { if (!$('.ov')) showUpdates(true); },
   manage: () => { ui.manage = !ui.manage; render(); },
   'pick-profile': el => { if (ui.manage) return; PROFILE = DB.get('p:' + el.dataset.id); DB.set('cur', PROFILE.id); PROFILE.settings = PROFILE.settings || { vi: true }; go('#/home'); },
   'new-profile': async () => {

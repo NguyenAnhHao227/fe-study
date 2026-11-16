@@ -33,6 +33,11 @@ Push cả thư mục này lên repo → Settings → Pages → Deploy from branc
 - Môn khác: bấm vào môn → **Nhập ngân hàng câu hỏi** (`.docx`/`.txt`/`.json`), hoặc chạy `build-bank.js` với mã môn khác rồi thêm `<script src="data/<mã>.js">` vào `index.html`.
 - Định dạng file: `Question N: [ID: …] …`, các dòng `A. …`, `Answer: B`, `Explanation: …`, dòng `Vietnamese: …` ngay dưới mỗi mục để có bản dịch.
 
+## Thông báo cập nhật ("Có gì mới")
+
+Mỗi thiết bị thấy một **thông báo lớn đúng một lần** sau mỗi đợt cập nhật, rồi có **chuông 🔔 ở góc trên bên phải** để xem lại lịch sử (có chấm đỏ khi còn tin chưa đọc). Không hiện khi đang làm bài; thiết bị hoàn toàn mới thì không bị báo.
+Nội dung nằm ở `data/changelog.js`. **Mỗi lần cập nhật chỉ cần thêm một mục lên đầu danh sách** (id mới, tiêu đề, ngày, vài ý ngắn gọn), rồi commit & push.
+
 ## Bản dịch tiếng Việt (tự động + dịch hàng loạt)
 
 Nút **VI** hiện bản dịch nhỏ dưới tiếng Anh. Với câu thiếu bản dịch, AI **tự dịch đúng phần còn thiếu**:
