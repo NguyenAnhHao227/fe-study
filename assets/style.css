@@ -235,3 +235,16 @@ code{background:var(--line);padding:1px 5px;border-radius:5px;font-size:.9em}
 }
 @media (max-width:560px){
   .trow{grid-template-columns:1fr auto}.trow .bar{grid-column:1/-1;order:3;margin-top:-2px}.tile,.tile .face{width:128px}.tile .face{height:128px;font-size:2.8rem}.qcard{padding:16px}.q-en{font-size:1.05rem}}
+
+/* chọn mục (bộ đề) trong một môn */
+.sets-h{font-size:1.15rem;margin:18px 0 4px}
+.setcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:10px}
+.setcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:left;box-shadow:var(--shadow);transition:.15s;position:relative;overflow:hidden;color:inherit}
+.setcard::before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:var(--c)}
+.setcard:hover:not(:disabled){transform:translateY(-3px);border-color:var(--c)}
+.setcard:disabled{opacity:.5}
+.setcard .ic{font-size:1.8rem}
+.setcard h3{font-size:1.2rem;margin:8px 0 4px}
+.setcard .cnt{font-size:1.8rem;font-weight:800;margin-top:12px}
+.setcard .cnt small{font-size:.85rem;font-weight:500;color:var(--muted)}
+.setbadge{display:inline-block;vertical-align:middle;font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:99px;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);margin-left:6px}

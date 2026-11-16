@@ -10,3 +10,4 @@ Nguon_de_thi_on_tap_5_mon_FE/
 tools/.translate-done.json
 tools/*.tmp
 data/*.tmp
+translate-queue/

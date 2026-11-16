@@ -144,11 +144,17 @@ function getBank(code) {
 }
 const qkey = (code, id) => code + '|' + id;
 const splitKey = k => { const i = k.indexOf('|'); return [k.slice(0, i), k.slice(i + 1)]; };
-function stats(code) {
-  const b = getBank(code), d = subjData(code);
+/* mục (bộ đề) trong một môn: bank.sets = [{id,name,short,desc,icon}], mỗi câu có q.g (không có = 'src') */
+const gOf = q => q.g || 'src';
+const setsOf = b => (b.sets && b.sets.length > 1 ? b.sets : null);
+const activeSet = () => { const r = route(); return r.name === 's' ? (r.arg2 || '') : ''; };
+const setInfo = (b, id) => (b.sets || []).find(x => x.id === id);
+const inSet = (q, set) => !set || gOf(q) === set;
+function stats(code, set = '') {
+  const b = getBank(code), d = subjData(code), qs = b.questions.filter(q => inSet(q, set));
   let done = 0, ok = 0, wrong = 0;
-  for (const q of b.questions) { const r = d.done[q.id]; if (r) { done++; r.ok ? ok++ : wrong++; } }
-  return { total: b.questions.length, done, ok, wrong, star: b.questions.filter(q => d.star[q.id]).length };
+  for (const q of qs) { const r = d.done[q.id]; if (r) { done++; r.ok ? ok++ : wrong++; } }
+  return { total: qs.length, done, ok, wrong, star: qs.filter(q => d.star[q.id]).length };
 }
 const defCfg = code => ({ n: SUBJ[code].n, min: SUBJ[code].min, src: 'new', topics: [], shuffleQ: true, shuffleO: true, instant: true });
 const getCfg = code => Object.assign(defCfg(code), subjData(code).cfg || {});
@@ -163,7 +169,7 @@ function inSrc(src, d, q) {
     default: return true;
   }
 }
-const poolFor = (code, cfg) => { const b = getBank(code), d = subjData(code); return b.questions.filter(q => (!cfg.topics.length || cfg.topics.includes(q.s)) && inSrc(cfg.src, d, q)); };
+const poolFor = (code, cfg, set = activeSet()) => { const b = getBank(code), d = subjData(code); return b.questions.filter(q => inSet(q, set) && (!cfg.topics.length || cfg.topics.includes(q.s)) && inSrc(cfg.src, d, q)); };
 const SRC_LABEL = { new: 'Chỉ câu mới (chưa làm)', newwrong: 'Câu mới + câu sai', wrong: 'Chỉ câu sai', star: 'Câu đã đánh dấu', all: 'Tất cả (làm lại)' };
 const canShuffle = q => !q.o.some(o => /\b(all|none|both|neither) of (the )?(above|these|them)/i.test(o[1]) || /\b[A-E] (and|&|or) [A-E]\b/.test(o[1]) || /\babove\b/i.test(o[1]));
 
@@ -330,7 +336,7 @@ function viewHome() {
         <div class="ic">${s.icon}</div><h3>${s.code}</h3><div class="nm">${esc(s.name)}</div>
         <div class="cnt">${st.total}<small> câu</small></div>
         <div class="bar"><i style="width:${st.total ? st.done / st.total * 100 : 0}%"></i></div>
-        <div class="sm muted">${st.total ? `Đã làm ${st.done}/${st.total} · sai ${st.wrong}` : 'Chưa có câu hỏi — bấm để nhập'}</div>
+        <div class="sm muted">${st.total ? `Đã làm ${st.done}/${st.total} · sai ${st.wrong}` : 'Chưa có câu hỏi — bấm để nhập'}</div>${setsOf(getBank(s.code)) ? `<div class="sm muted">${getBank(s.code).sets.map(x => `${x.icon || ''} ${esc(x.short || x.name)} ${stats(s.code, x.id).total}`).join(' · ')}</div>` : ''}
       </button>`).join('')}</div></main>`;
 }
 
@@ -347,12 +353,33 @@ function refreshSummary(code) {
   const b = $('#startBtn'); if (b) b.disabled = !poolFor(code, getCfg(code)).length;
 }
 
-function viewSubject(code) {
-  const S = SUBJ[code], b = getBank(code), st = stats(code), cfg = getCfg(code), d = subjData(code);
-  const sess = PROFILE.sessions.filter(s => s.subj === code);
-  const head = `${topbar()}<main class="wrap" style="--c:${S.color}">
+function viewSets(code) { // môn có nhiều mục: chọn mục trước khi vào tạo đề
+  const S = SUBJ[code], b = getBank(code), A = PROFILE.active;
+  return `${topbar()}<main class="wrap" style="--c:${S.color}">
     <div class="crumb"><button class="link" data-act="home">← Tất cả môn</button></div>
-    <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}</h1><div class="muted">${esc(S.name)}</div></div></div>`;
+    <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}</h1><div class="muted">${esc(S.name)}</div></div></div>
+    ${A && A.subj === code ? `<div class="banner"><span>⏱ Đang làm dở <b>${esc(A.title)}</b> (${A.items.filter(i => i.pick != null).length}/${A.items.length} câu).</span><span class="grow"></span><button class="btn pri sm" data-act="resume">Làm tiếp</button></div><br>` : ''}
+    <h2 class="sets-h">Bạn muốn ôn đề nào?</h2>
+    <div class="setcards">${b.sets.map(x => { const st = stats(code, x.id); return `
+      <button class="setcard" data-act="open-set" data-set="${x.id}" ${st.total ? '' : 'disabled'}>
+        <div class="ic">${x.icon || '📄'}</div><h3>${esc(x.name)}</h3><div class="muted sm">${esc(x.desc || '')}</div>
+        <div class="cnt">${st.total}<small> câu</small></div>
+        <div class="bar"><i style="width:${st.total ? st.done / st.total * 100 : 0}%"></i></div>
+        <div class="sm muted">Đã làm ${st.done}/${st.total} · sai ${st.wrong}${st.star ? ' · ⭐ ' + st.star : ''}</div>
+      </button>`; }).join('')}</div>
+    <p class="muted sm" style="margin-top:14px">Tiến độ, câu sai và câu đánh dấu được tính riêng cho từng mục.</p></main>`;
+}
+
+function viewSubject(code, set = '') {
+  const b0 = getBank(code);
+  if (setsOf(b0) && !setInfo(b0, set)) return viewSets(code);
+  const S = SUBJ[code], b = b0, st = stats(code, set), cfg = getCfg(code), d = subjData(code), hasSets = !!setsOf(b), SI = hasSets ? setInfo(b, set) : null;
+  const sess = PROFILE.sessions.filter(s => s.subj === code && (!hasSets || (s.items.length && b.idx.get(s.items[0].id) && gOf(b.idx.get(s.items[0].id)) === set)));
+  const inTopic = i => b.questions.filter(q => q.s === i && inSet(q, set));
+  const topicIdx = b.topics.map((t, i) => i).filter(i => inTopic(i).length);
+  const head = `${topbar()}<main class="wrap" style="--c:${S.color}">
+    <div class="crumb"><button class="link" data-act="${hasSets ? 'open-subject' : 'home'}" ${hasSets ? `data-code="${code}"` : ''}>${hasSets ? '← ' + S.code + ' · chọn mục khác' : '← Tất cả môn'}</button></div>
+    <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}${SI ? ` <span class="setbadge">${SI.icon || ''} ${esc(SI.name)}</span>` : ''}</h1><div class="muted">${esc(S.name)}</div></div></div>`;
   if (b.empty) return head + `<div class="panel empty"><h2>Chưa có câu hỏi cho ${S.code}</h2>
     <p>Nhập file ngân hàng câu hỏi (<code>.docx</code>, <code>.txt</code> hoặc <code>.json</code>) theo cùng định dạng với file CSI106 mẫu.</p>
     <button class="btn pri big" data-act="import-bank" data-code="${code}">＋ Nhập ngân hàng câu hỏi</button></div></main>`;
@@ -365,9 +392,9 @@ function viewSubject(code) {
         <div class="fld row"><div><label>Số câu</label><input type="number" min="1" max="500" data-cfg="n" value="${cfg.n}"></div>
           <div><label>Thời gian (phút, 0 = không giới hạn)</label><input type="number" min="0" max="600" data-cfg="min" value="${cfg.min}"></div></div>
         <div class="fld"><span class="lb">Lấy câu hỏi từ</span><div class="seg">${Object.entries(SRC_LABEL).map(([k, v]) => `<button class="${cfg.src === k ? 'on' : ''}" data-act="cfg-src" data-v="${k}">${v}</button>`).join('')}</div></div>
-        <div class="fld"><span class="lb">Chủ đề <span class="muted sm">(số câu phù hợp / tổng)</span></span><div class="chips">
+        ${topicIdx.length > 1 ? `<div class="fld"><span class="lb">Chủ đề <span class="muted sm">(số câu phù hợp / tổng)</span></span><div class="chips">
           <button class="${cfg.topics.length ? '' : 'on'}" data-act="cfg-topic" data-i="all">Tất cả</button>
-          ${b.topics.map((t, i) => `<button class="${cfg.topics.includes(i) ? 'on' : ''}" data-act="cfg-topic" data-i="${i}">${esc(t.name)}<small>${b.questions.filter(q => q.s === i && inSrc(cfg.src, d, q)).length}/${b.questions.filter(q => q.s === i).length}</small></button>`).join('')}</div></div>
+          ${topicIdx.map(i => `<button class="${cfg.topics.includes(i) ? 'on' : ''}" data-act="cfg-topic" data-i="${i}">${esc(b.topics[i].name)}<small>${inTopic(i).filter(q => inSrc(cfg.src, d, q)).length}/${inTopic(i).length}</small></button>`).join('')}</div></div>` : ''}
         <label class="sw"><input type="checkbox" data-cfg="instant" ${cfg.instant ? 'checked' : ''}> Hiện đáp án + giải thích ngay sau khi chọn</label>
         <label class="sw"><input type="checkbox" data-cfg="shuffleQ" ${cfg.shuffleQ ? 'checked' : ''}> Trộn thứ tự câu hỏi</label>
         <label class="sw"><input type="checkbox" data-cfg="shuffleO" ${cfg.shuffleO ? 'checked' : ''}> Trộn thứ tự đáp án A/B/C… <span class="muted sm">(tránh nhớ vị trí đáp án)</span></label>
@@ -654,7 +681,7 @@ function startFromCfg(code, srcOverride) {
   let pool = poolFor(code, cfg); if (!pool.length) return toast('Không có câu nào phù hợp.');
   pool = cfg.shuffleQ ? shuffle(pool) : pool; let qs = pool.slice(0, cfg.n);
   if (!cfg.shuffleQ) qs.sort((a, c) => b.order.get(a.id) - b.order.get(c.id));
-  const label = { wrong: 'Ôn câu sai', star: 'Ôn câu đánh dấu' }[srcOverride] || 'Đề #{n}';
+  const set = activeSet(), sn = set && (setInfo(b, set) || {}).short, label = (sn ? sn + ' · ' : '') + ({ wrong: 'Ôn câu sai', star: 'Ôn câu đánh dấu' }[srcOverride] || 'Đề #{n}');
   startSession(code, label, 'custom', qs, { ...cfg, min: cfg.min });
 }
 
@@ -665,15 +692,16 @@ function viewResult(id) {
   const ok = items.filter(i => i.ok === true).length, bad = items.filter(i => i.ok === false).length, skip = items.length - ok - bad;
   const byT = {}; items.forEach(i => { const q = b.idx.get(i.id); const t = (b.topics[q.s] || {}).name || 'Khác'; (byT[t] = byT[t] || { n: 0, ok: 0 }).n++; if (i.ok) byT[t].ok++; });
   const pass = S.score >= PASS, col = pass ? 'var(--ok)' : 'var(--bad)';
+  const sSet = setsOf(b) && items.length && b.idx.get(items[0].id) ? gOf(b.idx.get(items[0].id)) : '', sAttr = sSet ? ` data-set="${sSet}"` : '';
   const rf = ui.rf, list = items.map((it, i) => ({ it, i })).filter(({ it }) => rf === 'all' || (rf === 'wrong' && it.ok === false) || (rf === 'skip' && it.ok === null) || (rf === 'ok' && it.ok === true));
   return `${topbar()}<main class="wrap" style="--c:${SUBJ[S.subj].color}">
-    <div class="crumb"><button class="link" data-act="open-subject" data-code="${S.subj}">← ${S.subj}</button></div>
+    <div class="crumb"><button class="link" data-act="open-subject" data-code="${S.subj}"${sAttr}>← ${S.subj}${sSet ? ' · ' + esc((setInfo(b, sSet) || {}).short || '') : ''}</button></div>
     <section class="panel"><div class="rhero">
       <div class="ring" style="--p:${S.score * 10};--c:${col}"><div><span><b style="color:${col}">${S.score.toFixed(1)}</b><span>/ 10</span></span></div></div>
       <div class="grow"><h1>${pass ? 'Đạt 🎉' : 'Chưa đạt'} <span class="muted sm" style="font-weight:400">(đạt ≥ ${PASS.toFixed(1)}/10)</span></h1>
         <div class="muted">${esc(S.title)} · ${S.subj} · ${fdate(S.ts)}</div>
         <div class="row" style="margin-top:12px"><span class="pill ok">✓ ${ok} đúng</span><span class="pill bad">✗ ${bad} sai</span><span class="pill warn">○ ${skip} bỏ trống</span><span class="pill gray">⏱ ${fmt(S.used)}${S.limit ? ' / ' + fmt(S.limit) : ''}</span></div>
-        <div class="row" style="margin-top:16px"><button class="btn pri" data-act="open-subject" data-code="${S.subj}">Tạo đề mới</button>
+        <div class="row" style="margin-top:16px"><button class="btn pri" data-act="open-subject" data-code="${S.subj}"${sAttr}>Tạo đề mới</button>
           ${bad + skip ? `<button class="btn" data-act="redo-wrong" data-id="${S.id}">Làm lại ${bad + skip} câu sai/bỏ trống</button>` : ''}</div></div></div></section>
     <section class="panel"><h2>Theo chủ đề</h2>${Object.entries(byT).map(([t, v]) => `<div class="trow"><span>${esc(t)}</span><div class="bar" style="margin:0"><i style="width:${v.ok / v.n * 100}%;background:${v.ok / v.n >= .5 ? 'var(--ok)' : 'var(--bad)'}"></i></div><b>${v.ok}/${v.n}</b></div>`).join('')}</section>
     <section class="review"><h2 style="margin-top:22px">Xem lại từng câu</h2>
@@ -682,14 +710,14 @@ function viewResult(id) {
 }
 
 /* ============ điều hướng / render ============ */
-const route = () => { const [a, b] = location.hash.replace(/^#\/?/, '').split('/'); return { name: a || 'who', arg: b }; };
+const route = () => { const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/'); return { name: a || 'who', arg: b, arg2: c }; };
 function render(keep) {
   const y = keep ? window.scrollY : 0, r = route(), app = $('#app');
   if (r.name !== 'who' && !PROFILE) { location.hash = '#/'; return; }
   let html = '';
   if (r.name === 'who') { html = viewWho(); }
   else if (r.name === 'home') html = viewHome();
-  else if (r.name === 's' && SUBJ[r.arg]) html = viewSubject(r.arg);
+  else if (r.name === 's' && SUBJ[r.arg]) html = viewSubject(r.arg, r.arg2);
   else if (r.name === 'exam') { if (!PROFILE.active) { location.hash = '#/home'; return; } html = viewExam(); }
   else if (r.name === 'result') { html = viewResult(r.arg); if (!html) { location.hash = '#/home'; return; } }
   else { location.hash = '#/'; return; }
@@ -843,7 +871,8 @@ const A = {
     if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
     DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
   },
-  'open-subject': el => go('#/s/' + el.dataset.code),
+  'open-subject': el => go('#/s/' + el.dataset.code + (el.dataset.set ? '/' + el.dataset.set : '')),
+  'open-set': el => go('#/s/' + route().arg + '/' + el.dataset.set),
   'import-bank': el => importBank(el.dataset.code),
   'reset-bank': async el => { if (await confirmBox('Về ngân hàng gốc?', 'Xoá các câu đã nhập thêm, chỉ giữ ngân hàng có sẵn.', 'Đồng ý', true)) { DB.del('bank:' + el.dataset.code); delete bankCache[el.dataset.code]; render(); } },
   'reset-progress': async el => {

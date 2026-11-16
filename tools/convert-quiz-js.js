@@ -21,7 +21,9 @@ const CS = load('questions_data.js', 'questionsData');     // CSI106, 600 câu, 
 const CEA = load('csi104_data.js', 'CSI104_QUESTIONS');    // CEA201, 318 câu (chia 7 phần)
 const SUOC = load('suoc_data.js', 'SUOC_QUESTIONS');       // kho tổng hợp: CSI106 / PRF192 / SSA101 / CEA201
 
-const clean = s => String(s == null ? '' : s).replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').trim();
+// Dữ liệu nguồn có chỗ bị mã hoá HTML (&lt; &gt; &amp; …): giải mã để hiển thị đúng << , > , <= …
+const unescapeHtml = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(+n)).replace(/&amp;/g, '&');
+const clean = s => unescapeHtml(String(s == null ? '' : s)).replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').trim();
 const norm = s => clean(s).toLowerCase().replace(/\s+/g, ' ');
 const letters = c => [...new Set(String(c).toUpperCase().match(/[A-H]/g) || [])].sort().join('');
 

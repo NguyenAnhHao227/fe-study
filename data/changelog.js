@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-16-de-giang-vien',
+    title: 'CEA201: thêm đề của giảng viên',
+    date: '16/11/2026',
+    items: [
+      { icon: '👨‍🏫', text: 'CEA201 có thêm 200 câu ôn tập do giảng viên gửi, đã có sẵn bản dịch tiếng Việt.' },
+      { icon: '📚', text: 'Bấm vào CEA201 sẽ chọn mục trước: Đề của giảng viên hoặc Đề cũ. Tiến độ và câu sai tính riêng cho từng mục.' },
+    ],
+  },
+  {
     id: '2026-11-16-dich-ai',
     title: 'Dịch tiếng Việt thông minh hơn',
     date: '16/11/2026',

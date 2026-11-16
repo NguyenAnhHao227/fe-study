@@ -33,6 +33,16 @@ Push cả thư mục này lên repo → Settings → Pages → Deploy from branc
 - Môn khác: bấm vào môn → **Nhập ngân hàng câu hỏi** (`.docx`/`.txt`/`.json`), hoặc chạy `build-bank.js` với mã môn khác rồi thêm `<script src="data/<mã>.js">` vào `index.html`.
 - Định dạng file: `Question N: [ID: …] …`, các dòng `A. …`, `Answer: B`, `Explanation: …`, dòng `Vietnamese: …` ngay dưới mỗi mục để có bản dịch.
 
+## Môn có nhiều mục (CEA201: đề giảng viên / đề cũ)
+
+Môn nào có `sets` trong dữ liệu thì khi bấm vào môn sẽ hiện bước **chọn mục** trước khi tạo đề (tiến độ, câu sai, đánh dấu tính riêng theo mục). CEA201 có 2 mục: **Đề của giảng viên** (200 câu, mỗi câu có `g:'gv'`) và **Đề cũ (source đã mua)** (câu không có `g`).
+Nạp / cập nhật đề giảng viên từ file `.txt` có dấu ✓:
+```bash
+node tools/import-giangvien.js "<file.txt>" --dry   # đọc thử, đối chiếu bảng đáp án cuối file
+node tools/import-giangvien.js "<file.txt>"         # ghi vào data/cea201.js (giữ bản dịch đã có)
+```
+Nếu chạy lại `tools/convert-quiz-js.js` (ghi đè `cea201.js`) thì chạy lại lệnh trên sau đó. Xuất hàng chờ dịch bỏ một số môn: `node tools/translate-queue.js export --skip CSI106 --force` (đề giảng viên được xếp vào các lô đầu).
+
 ## Thông báo cập nhật ("Có gì mới")
 
 Mỗi thiết bị thấy một **thông báo lớn đúng một lần** sau mỗi đợt cập nhật, rồi có **chuông 🔔 ở góc trên bên phải** để xem lại lịch sử (có chấm đỏ khi còn tin chưa đọc). Không hiện khi đang làm bài; thiết bị hoàn toàn mới thì không bị báo.
@@ -47,7 +57,18 @@ Nút **VI** hiện bản dịch nhỏ dưới tiếng Anh. Với câu thiếu b�
 - Định dạng trao đổi với AI là văn bản có nhãn (`[Q1]` / `T:` / `A:`), không dùng JSON nên không còn lỗi "không đúng định dạng".
 - Tắt nút VI thì không gọi AI. Gặp lỗi (hết lượt, sai mã) thì tạm dừng 2 phút và hiện nút để thử lại.
 
-**Dịch hàng loạt một lần** (khuyên dùng, để mọi người có bản dịch sẵn, không tốn lượt AI lúc dùng): chạy trên máy bạn, ghi thẳng bản dịch vào `data/*.js`. API key đặt qua biến môi trường, **không** ghi vào file.
+**Dịch bằng gói có sẵn, không tốn token API** (ChatGPT Plus, Antigravity, Codex…): xuất các lô cần dịch ra tệp, đưa cho AI bên đó dịch, rồi nhập kết quả về.
+```bash
+node tools/translate-queue.js export            # xuất ra translate-queue/todo (chia lô 30 câu) + PROMPT.txt
+# → mở translate-queue bằng Antigravity/Codex và dán câu lệnh trong PROMPT.txt, hoặc dán từng lô vào ChatGPT
+#   kết quả lưu vào translate-queue/done/ cùng tên tệp
+node tools/translate-queue.js import --check    # kiểm tra, chưa ghi
+node tools/translate-queue.js import            # nhập thật vào data/*.js
+node tools/translate-queue.js status            # còn bao nhiêu việc
+```
+Chỉ điền chỗ còn trống (không ghi đè bản dịch đã có), nhập lại nhiều lần được, lô nào AI bỏ sót sẽ được xuất lại ở lần export sau (`--force`). Thư mục `translate-queue/` không đưa lên GitHub.
+
+**Dịch hàng loạt qua API một lần** (khi muốn tự động hoàn toàn, tốn token API; để mọi người có bản dịch sẵn, không tốn lượt AI lúc dùng): chạy trên máy bạn, ghi thẳng bản dịch vào `data/*.js`. API key đặt qua biến môi trường, **không** ghi vào file.
 ```powershell
 $env:AI_BASE  = "https://api.xah.io/v1"
 $env:AI_KEY   = "sk-..."
