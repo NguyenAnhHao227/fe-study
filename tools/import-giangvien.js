@@ -47,7 +47,7 @@ const key = {};
 for (const l of lines.slice(endAt)) for (const m of l.matchAll(/#(\d+)\s*:\s*([A-H]+)/g)) key[+m[1]] = m[2];
 
 // Sửa đáp án đã được người quản lý xác nhận (đề của giảng viên đánh dấu khác). Chạy lại công cụ vẫn giữ các sửa này.
-const FIX = { 20: 'D' };   // câu 20: AB + A'B = B nên "Depends on the values of A and B"
+const FIX = { 20: 'D', 184: 'B' };   // 20: AB + A'B = B nên "Depends on the values of A and B"; 184: AND có bong bóng ở đầu vào = NOR
 const problems = [];
 const questions = qs.map(q => {
   const a = FIX[q.n] || q.opts.filter(o => o.ok).map(o => o.k).join('');

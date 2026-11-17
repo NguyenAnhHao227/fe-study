@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-17-chon-ky',
+    title: 'Chọn kỳ học trước khi chọn môn',
+    date: '17/11/2026',
+    items: [
+      { icon: '🎓', text: 'Trang chủ giờ có Kỳ 1 đến Kỳ 9. Bấm một kỳ để thấy các môn của kỳ đó (theo khung chương trình của trường).' },
+      { icon: '👨‍🏫', text: 'CEA201: 200 câu của giảng viên đều đã có lời giải thích song ngữ. Vài câu đề của thầy bị sai đáp án, phần giải thích có ghi rõ.' },
+    ],
+  },
+  {
     id: '2026-11-16-de-giang-vien',
     title: 'CEA201: thêm đề của giảng viên',
     date: '16/11/2026',
