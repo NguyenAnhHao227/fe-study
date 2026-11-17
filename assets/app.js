@@ -5,14 +5,34 @@ const P = window.FEParser;
 const LETTERS = 'ABCDEFGH';
 const PASS = 4; // điểm đạt (thang 10)
 const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
+/* Khung chương trình BIT_SE (theo FAP), từ kỳ 1 trở đi. Môn nào chưa có file data/<mã>.js thì hiện "chưa có đề". */
 const SUBJECTS = [
-  { code: 'CSI106', name: 'Introduction to Computer Science', n: 60, min: 60, color: '#6366f1', icon: '💻' },
-  { code: 'CEA201', name: 'Computer Organization & Architecture', n: 50, min: 60, color: '#0ea5e9', icon: '🧠' },
-  { code: 'MAE101', name: 'Mathematics for Engineering', n: 50, min: 60, color: '#f59e0b', icon: '∑' },
-  { code: 'PRF192', name: 'Programming Fundamentals (C)', n: 50, min: 60, color: '#10b981', icon: '{ }' },
-  { code: 'SSA101', name: 'Study Skills for Academic Success', n: 50, min: 60, color: '#ec4899', icon: '🎓' },
+  { code: 'CSI106', name: 'Introduction to Computer Science', n: 60, min: 60, color: '#6366f1', icon: '💻', k: 1 },
+  { code: 'CEA201', name: 'Computer Organization & Architecture', n: 50, min: 60, color: '#0ea5e9', icon: '🧠', k: 1 },
+  { code: 'MAE101', name: 'Mathematics for Engineering', n: 50, min: 60, color: '#f59e0b', icon: '∑', k: 1 },
+  { code: 'PRF192', name: 'Programming Fundamentals (C)', n: 50, min: 60, color: '#10b981', icon: '{ }', k: 1 },
+  { code: 'SSA101', name: 'Study Skills for Academic Success', n: 50, min: 60, color: '#ec4899', icon: '🎓', k: 1 },
+  ...[
+    [2, 'MAD101', 'Discrete Mathematics', '🔢'], [2, 'NWC204', 'Computer Networking', '🌐'], [2, 'OSG202', 'Operating Systems', '🖥'],
+    [2, 'PRO192', 'Object-Oriented Programming', '☕'], [2, 'WED201c', 'Web Design', '🎨'],
+    [3, 'DBI202', 'Introduction to Databases', '🗄'], [3, 'JPD113', 'Elementary Japanese 1 – A1.1', '🇯🇵'], [3, 'LAB211', 'OOP with Java Lab', '☕'],
+    [3, 'MAS291', 'Statistics & Probability', '📊'], [3, 'SWE202c', 'Introduction to Software Engineering', '🛠'],
+    [4, 'CSD201', 'Data Structures and Algorithms', '🌳'], [4, 'IOT102', 'Internet of Things', '📡'], [4, 'JPD123', 'Elementary Japanese 1 – A1.2', '🇯🇵'],
+    [4, 'PRJ301', 'Java Web Application Development', '🕸'], [4, 'SWR302', 'Software Requirement', '📝'],
+    [5, 'SE-0001', 'Elective 1', '⭐'], [5, 'SSG105', 'Communication and In-Group Working Skills', '🤝'], [5, 'SWP391', 'Software Development Project', '🚀'],
+    [5, 'SWT301', 'Software Testing', '🧪'], [5, 'WDU203c', 'UI/UX Design', '🎨'],
+    [6, 'ENW493c', 'Research Methods & Academic Writing Skills', '✍'], [6, 'HMR101c', 'Human Rights', '⚖'], [6, 'OJT202', 'On-The-Job Training', '💼'],
+    [7, 'EXE101', 'Experiential Entrepreneurship 1', '💡'], [7, 'PMG201c', 'Project Management', '📅'], [7, 'SE-0002', 'Elective 2', '⭐'],
+    [7, 'SE-0003', 'Elective 3', '⭐'], [7, 'SWD392', 'Software Architecture and Design', '🏗'],
+    [8, 'EXE201', 'Experiential Entrepreneurship 2', '💡'], [8, 'ITE302c', 'Ethics in IT', '🧭'], [8, 'MLN111', 'Philosophy of Marxism – Leninism', '📖'],
+    [8, 'MLN122', 'Political Economics of Marxism – Leninism', '📖'], [8, 'PRM393', 'Mobile Programming', '📱'], [8, 'SE-0004', 'Elective 4', '⭐'],
+    [9, 'HCM202', 'HCM Ideology', '📖'], [9, 'MLN131', 'Scientific Socialism', '📖'], [9, 'SE_GRA_ELE', 'Graduation Elective – Software Engineering', '🎓'],
+    [9, 'VNR202', 'History of CPV', '📖'],
+  ].map(([k, code, name, icon], i) => ({ code, name, n: 50, min: 60, color: COLORS[(i + 3) % COLORS.length], icon, k })),
 ];
 const SUBJ = Object.fromEntries(SUBJECTS.map(s => [s.code, s]));
+const TERMS = [...new Set(SUBJECTS.map(s => s.k))].sort((a, b) => a - b);
+const subjectsOf = k => SUBJECTS.filter(s => s.k === k);
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -318,25 +338,43 @@ function viewWho() {
     <p class="foot">Dữ liệu lưu ngay trong trình duyệt này. Muốn chuyển máy: Cài đặt → Sao lưu.</p></section>`;
 }
 
-function viewHome() {
-  const all = SUBJECTS.map(s => ({ s, st: stats(s.code) }));
-  const T = all.reduce((a, x) => a + x.st.total, 0), D = all.reduce((a, x) => a + x.st.done, 0), W = all.reduce((a, x) => a + x.st.wrong, 0);
-  const A = PROFILE.active;
+const resumeBanner = () => { const A = PROFILE.active; return A ? `<div class="banner"><span>⏱ Bạn đang làm dở <b>${esc(A.title)}</b> (${SUBJ[A.subj].code}, ${A.items.filter(i => i.pick != null).length}/${A.items.length} câu).</span><span class="grow"></span><button class="btn pri sm" data-act="resume">Làm tiếp</button></div>` : ''; };
+const termStats = k => { const ss = subjectsOf(k).map(s => stats(s.code)); return { subjects: ss.length, withBank: ss.filter(x => x.total).length, total: ss.reduce((a, x) => a + x.total, 0), done: ss.reduce((a, x) => a + x.done, 0), wrong: ss.reduce((a, x) => a + x.wrong, 0) }; };
+
+function viewHome() { // bước 1: chọn kỳ
+  const all = SUBJECTS.map(s => stats(s.code));
+  const T = all.reduce((a, x) => a + x.total, 0), D = all.reduce((a, x) => a + x.done, 0), W = all.reduce((a, x) => a + x.wrong, 0), M = all.filter(x => x.total).length;
   return `${topbar()}<main class="wrap">
-    <div class="hero"><h1>Chào ${esc(PROFILE.name)} 👋</h1><p class="muted">Chọn một môn để tạo đề ôn thi.</p>
+    <div class="hero"><h1>Chào ${esc(PROFILE.name)} 👋</h1><p class="muted">Chọn kỳ học, rồi chọn môn để tạo đề ôn thi.</p>
     <div class="totals">
-      <div class="stat main"><b>${T}</b><span>Tổng số câu của 5 môn</span></div>
+      <div class="stat main"><b>${T}</b><span>Tổng số câu của ${M} môn đã có đề</span></div>
       <div class="stat"><b>${D}</b><span>Đã làm</span></div>
       <div class="stat"><b style="color:var(--bad)">${W}</b><span>Đang sai (cần ôn lại)</span></div>
       <div class="stat"><b>${PROFILE.sessions.length}</b><span>Phiên đã nộp</span></div>
     </div></div>
-    ${A ? `<div class="banner"><span>⏱ Bạn đang làm dở <b>${esc(A.title)}</b> (${SUBJ[A.subj].code}, ${A.items.filter(i => i.pick != null).length}/${A.items.length} câu).</span><span class="grow"></span><button class="btn pri sm" data-act="resume">Làm tiếp</button></div>` : ''}
-    <div class="subjects">${all.map(({ s, st }) => `
-      <button class="scard" style="--c:${s.color}" data-act="open-subject" data-code="${s.code}">
+    ${resumeBanner()}
+    <h2 class="sets-h">Bạn đang ôn kỳ nào?</h2>
+    <div class="terms">${TERMS.map(k => { const t = termStats(k); return `
+      <button class="tcard${t.withBank ? '' : ' soon'}" data-act="open-term" data-k="${k}">
+        <div class="tk"><small>Kỳ</small>${k}</div>
+        <div class="tinfo"><b>${t.subjects} môn</b>
+          <span class="sm muted">${t.withBank ? `${t.withBank}/${t.subjects} môn đã có đề · ${t.total} câu` : 'Chưa có đề'}</span>
+          ${t.total ? `<div class="bar"><i style="width:${t.done / t.total * 100}%"></i></div><span class="sm muted">Đã làm ${t.done}/${t.total} · sai ${t.wrong}</span>` : ''}</div>
+      </button>`; }).join('')}</div></main>`;
+}
+
+function viewTerm(k) { // bước 2: các môn của kỳ
+  const ss = subjectsOf(k).map(s => ({ s, st: stats(s.code) }));
+  return `${topbar()}<main class="wrap">
+    <div class="crumb"><button class="link" data-act="home">← Chọn kỳ khác</button></div>
+    <div class="hero"><h1>Kỳ ${k}</h1><p class="muted">${ss.length} môn · chọn một môn để tạo đề ôn thi.</p></div>
+    ${resumeBanner()}
+    <div class="subjects">${ss.map(({ s, st }) => `
+      <button class="scard${st.total ? '' : ' soon'}" style="--c:${s.color}" data-act="open-subject" data-code="${s.code}">
         <div class="ic">${s.icon}</div><h3>${s.code}</h3><div class="nm">${esc(s.name)}</div>
         <div class="cnt">${st.total}<small> câu</small></div>
         <div class="bar"><i style="width:${st.total ? st.done / st.total * 100 : 0}%"></i></div>
-        <div class="sm muted">${st.total ? `Đã làm ${st.done}/${st.total} · sai ${st.wrong}` : 'Chưa có câu hỏi — bấm để nhập'}</div>${setsOf(getBank(s.code)) ? `<div class="sm muted">${getBank(s.code).sets.map(x => `${x.icon || ''} ${esc(x.short || x.name)} ${stats(s.code, x.id).total}`).join(' · ')}</div>` : ''}
+        <div class="sm muted">${st.total ? `Đã làm ${st.done}/${st.total} · sai ${st.wrong}` : 'Chưa có đề — bấm để nhập'}</div>${setsOf(getBank(s.code)) ? `<div class="sm muted">${getBank(s.code).sets.map(x => `${x.icon || ''} ${esc(x.short || x.name)} ${stats(s.code, x.id).total}`).join(' · ')}</div>` : ''}
       </button>`).join('')}</div></main>`;
 }
 
@@ -356,7 +394,7 @@ function refreshSummary(code) {
 function viewSets(code) { // môn có nhiều mục: chọn mục trước khi vào tạo đề
   const S = SUBJ[code], b = getBank(code), A = PROFILE.active;
   return `${topbar()}<main class="wrap" style="--c:${S.color}">
-    <div class="crumb"><button class="link" data-act="home">← Tất cả môn</button></div>
+    <div class="crumb"><button class="link" data-act="open-term" data-k="${S.k}">← Kỳ ${S.k}</button></div>
     <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}</h1><div class="muted">${esc(S.name)}</div></div></div>
     ${A && A.subj === code ? `<div class="banner"><span>⏱ Đang làm dở <b>${esc(A.title)}</b> (${A.items.filter(i => i.pick != null).length}/${A.items.length} câu).</span><span class="grow"></span><button class="btn pri sm" data-act="resume">Làm tiếp</button></div><br>` : ''}
     <h2 class="sets-h">Bạn muốn ôn đề nào?</h2>
@@ -378,7 +416,7 @@ function viewSubject(code, set = '') {
   const inTopic = i => b.questions.filter(q => q.s === i && inSet(q, set));
   const topicIdx = b.topics.map((t, i) => i).filter(i => inTopic(i).length);
   const head = `${topbar()}<main class="wrap" style="--c:${S.color}">
-    <div class="crumb"><button class="link" data-act="${hasSets ? 'open-subject' : 'home'}" ${hasSets ? `data-code="${code}"` : ''}>${hasSets ? '← ' + S.code + ' · chọn mục khác' : '← Tất cả môn'}</button></div>
+    <div class="crumb"><button class="link" data-act="${hasSets ? 'open-subject' : 'open-term'}" ${hasSets ? `data-code="${code}"` : `data-k="${S.k}"`}>${hasSets ? '← ' + S.code + ' · chọn mục khác' : '← Kỳ ' + S.k}</button></div>
     <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}${SI ? ` <span class="setbadge">${SI.icon || ''} ${esc(SI.name)}</span>` : ''}</h1><div class="muted">${esc(S.name)}</div></div></div>`;
   if (b.empty) return head + `<div class="panel empty"><h2>Chưa có câu hỏi cho ${S.code}</h2>
     <p>Nhập file ngân hàng câu hỏi (<code>.docx</code>, <code>.txt</code> hoặc <code>.json</code>) theo cùng định dạng với file CSI106 mẫu.</p>
@@ -717,13 +755,14 @@ function render(keep) {
   let html = '';
   if (r.name === 'who') { html = viewWho(); }
   else if (r.name === 'home') html = viewHome();
+  else if (r.name === 'k' && TERMS.includes(+r.arg)) html = viewTerm(+r.arg);
   else if (r.name === 's' && SUBJ[r.arg]) html = viewSubject(r.arg, r.arg2);
   else if (r.name === 'exam') { if (!PROFILE.active) { location.hash = '#/home'; return; } html = viewExam(); }
   else if (r.name === 'result') { html = viewResult(r.arg); if (!html) { location.hash = '#/home'; return; } }
   else { location.hash = '#/'; return; }
   if (r.name !== 'exam') stopTimer();
   app.innerHTML = html;
-  if (['home', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
+  if (['home', 'k', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
   if (PROFILE && PROFILE.settings.vi && (r.name === 'exam' || r.name === 'result')) scheduleTranslate(); // dịch AI chủ động phần còn thiếu
   if (r.name !== 'exam') setTimeout(maybeAnnounce, 450); // thông báo "Có gì mới" (đúng một lần)
   window.scrollTo(0, y);
@@ -871,6 +910,7 @@ const A = {
     if (!await confirmBox('Xoá hồ sơ?', `Xoá <b>${esc(p.name)}</b> cùng toàn bộ tiến độ và lịch sử? Không thể hoàn tác.`, 'Xoá', true)) return;
     DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
   },
+  'open-term': el => go('#/k/' + el.dataset.k),
   'open-subject': el => go('#/s/' + el.dataset.code + (el.dataset.set ? '/' + el.dataset.set : '')),
   'open-set': el => go('#/s/' + route().arg + '/' + el.dataset.set),
   'import-bank': el => importBank(el.dataset.code),

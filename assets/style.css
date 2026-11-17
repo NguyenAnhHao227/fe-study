@@ -248,3 +248,14 @@ code{background:var(--line);padding:1px 5px;border-radius:5px;font-size:.9em}
 .setcard .cnt{font-size:1.8rem;font-weight:800;margin-top:12px}
 .setcard .cnt small{font-size:.85rem;font-weight:500;color:var(--muted)}
 .setbadge{display:inline-block;vertical-align:middle;font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:99px;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);margin-left:6px}
+
+/* ---- chọn kỳ ---- */
+.terms{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:12px}
+.tcard{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;text-align:left;box-shadow:var(--shadow);transition:.15s;color:inherit}
+.tcard:hover{transform:translateY(-3px);border-color:var(--accent)}
+.tcard .tk{flex:none;width:62px;height:62px;border-radius:16px;background:var(--accent);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.7rem;font-weight:800;line-height:1}
+.tcard .tk small{font-size:.6rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.85;margin-bottom:2px}
+.tcard .tinfo{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.tcard .tinfo .bar{margin:4px 0 0}
+.tcard.soon .tk,.scard.soon .ic{filter:grayscale(1);opacity:.55}
+.scard.soon{opacity:.75}

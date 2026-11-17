@@ -4,7 +4,7 @@
  *
  *   node tools/import-giangvien.js "<đường dẫn file .txt>" [--dry]
  *
- * Chạy lại nhiều lần được: câu cũ của giảng viên bị thay bằng bản mới, nhưng BẢN DỊCH đã có được giữ lại (theo số câu).
+ * Chạy lại nhiều lần được: câu cũ của giảng viên bị thay bằng bản mới, nhưng BẢN DỊCH và GIẢI THÍCH đã có được giữ lại (theo số câu).
  * Lưu ý: tools/convert-quiz-js.js ghi đè data/cea201.js, nên nếu chạy lại nó thì chạy lại lệnh này sau đó.
  */
 const fs = require('fs');
@@ -46,13 +46,15 @@ for (let i = 0; i < endAt; i++) {
 const key = {};
 for (const l of lines.slice(endAt)) for (const m of l.matchAll(/#(\d+)\s*:\s*([A-H]+)/g)) key[+m[1]] = m[2];
 
+// Sửa đáp án đã được người quản lý xác nhận (đề của giảng viên đánh dấu khác). Chạy lại công cụ vẫn giữ các sửa này.
+const FIX = { 20: 'D' };   // câu 20: AB + A'B = B nên "Depends on the values of A and B"
 const problems = [];
 const questions = qs.map(q => {
-  const a = q.opts.filter(o => o.ok).map(o => o.k).join('');
+  const a = FIX[q.n] || q.opts.filter(o => o.ok).map(o => o.k).join('');
   const id = 'CEA201_GV' + String(q.n).padStart(3, '0');
   if (q.opts.length < 2) problems.push(`#${q.n}: thiếu đáp án`);
   if (!a) problems.push(`#${q.n}: không có đáp án đúng (✓)`);
-  if (key[q.n] && key[q.n] !== a) problems.push(`#${q.n}: dấu ✓ = ${a} nhưng bảng đáp án cuối file = ${key[q.n]}`);
+  if (key[q.n] && key[q.n] !== a && !FIX[q.n]) problems.push(`#${q.n}: dấu ✓ = ${a} nhưng bảng đáp án cuối file = ${key[q.n]}`);
   if (!key[q.n]) problems.push(`#${q.n}: không có trong bảng đáp án cuối file`);
   return { id, t: cleanStem(q.stem.join(' ')), o: q.opts.map(o => [o.k, o.t, '']), a, s: -1, g: 'gv' };
 });
@@ -77,7 +79,9 @@ let kept = 0;
 for (const q of questions) {
   q.s = tIdx;
   const o = old.get(q.id);
-  if (o) { // giữ bản dịch đã có
+  if (o) { // giữ bản dịch và giải thích đã có (tools/explain-queue.js ghi q.e / q.ev)
+    if (o.e) q.e = o.e;
+    if (o.ev) q.ev = o.ev;
     if (o.tv && norm(o.t) === norm(q.t)) { q.tv = o.tv; kept++; }
     q.o.forEach((x, i) => { const y = (o.o || []).find(p => p[0] === x[0]); if (y && y[2] && norm(y[1]) === norm(x[1])) q.o[i][2] = y[2]; });
   }

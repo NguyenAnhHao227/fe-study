@@ -11,3 +11,6 @@ tools/.translate-done.json
 tools/*.tmp
 data/*.tmp
 translate-queue/
+explain-queue/
+backups/
+GIAO-VIEC-TAT-CA.txt

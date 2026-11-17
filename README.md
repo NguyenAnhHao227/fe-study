@@ -43,6 +43,17 @@ node tools/import-giangvien.js "<file.txt>"         # ghi vào data/cea201.js (g
 ```
 Nếu chạy lại `tools/convert-quiz-js.js` (ghi đè `cea201.js`) thì chạy lại lệnh trên sau đó. Xuất hàng chờ dịch bỏ một số môn: `node tools/translate-queue.js export --skip CSI106 --force` (đề giảng viên được xếp vào các lô đầu).
 
+## Viết sẵn lời giải thích bằng AI có sẵn (không tốn token)
+
+Cùng cách với dịch: xuất → agent (Antigravity/Codex/ChatGPT) viết → nhập. Giải thích được ghi vào câu hỏi (`e` tiếng Anh, `ev` tiếng Việt), mọi người xem ngay, không cần mã truy cập.
+```bash
+node tools/explain-queue.js export               # mặc định: đề giảng viên còn thiếu giải thích → explain-queue/todo
+# → đưa explain-queue/GIAO-VIEC.txt cho agent, kết quả vào explain-queue/done/
+node tools/explain-queue.js import --check       # kiểm tra, chưa ghi
+node tools/explain-queue.js import               # nhập thật (không ghi đè giải thích đã có)
+```
+Muốn môn khác: `export --only PRF192`. Nếu AI cho rằng đáp án đề sai, nó ghi `FLAG:`; câu đó **không** được nhập mà được liệt kê trong `explain-queue/flags.txt` để người xem lại. Thư mục `explain-queue/` không đưa lên GitHub.
+
 ## Thông báo cập nhật ("Có gì mới")
 
 Mỗi thiết bị thấy một **thông báo lớn đúng một lần** sau mỗi đợt cập nhật, rồi có **chuông 🔔 ở góc trên bên phải** để xem lại lịch sử (có chấm đỏ khi còn tin chưa đọc). Không hiện khi đang làm bài; thiết bị hoàn toàn mới thì không bị báo.
