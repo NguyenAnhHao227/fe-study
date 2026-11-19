@@ -77,18 +77,22 @@ function ansHTML(c) {
   return q.opts.map((o, x) => `<label class="eos-chk"><input type="checkbox" data-e="opt" data-v="${L[x]}"${a === L[x] ? ' checked' : ''}><span>${L[x]}</span></label>`).join('');
 }
 function textStyle() { return `font-family:'${S.font}',Tahoma,Arial,sans-serif;font-size:${(S.size * 1.45).toFixed(1)}px`; }
+/* số thứ tự câu hiện tại / tổng số câu (đếm xuyên suốt các bài đọc) */
+function qCount(c) {
+  if (c.tab !== 'reading') return [c.i + 1, c.list.length];
+  const total = c.list.reduce((a, it) => a + it.qs.length, 0);
+  const before = c.list.slice(0, c.i).reduce((a, it) => a + it.qs.length, 0);
+  return [before + S.qi + 1, total];
+}
 function panelHTML() {
   const c = cur(), reading = c.tab === 'reading';
-  const n = reading ? (c.item ? c.item.qs.length : 0) : c.list.length, sel = reading ? S.qi : c.i;
   const label = TABS.find(t => t[0] === c.tab)[1];
-  const head = c.item ? `${label} ${c.i + 1}/${c.list.length}:` : `${label}:`;
-  const lastQ = sel >= n - 1;
+  const [no, total] = qCount(c);
+  const head = c.item ? `${label} ${no}/${total}:` : `${label}:`;
   return `<div class="eos-left">
-      <div class="eos-qh">Questions</div>
-      <div class="eos-qlist" role="listbox">${Array.from({ length: n }, (_, i) => `<div class="eos-qi${i === sel ? ' on' : ''}" role="option" data-e="q" data-i="${i}">${i + 1}</div>`).join('')}</div>
       <div class="eos-ah">Answer</div>
       <div class="eos-ans" id="eosAns">${ansHTML(c)}</div>
-      <button class="eos-btn eos-nq" data-e="nextq"${lastQ ? ' disabled' : ''}>Next Question</button>
+      <button class="eos-btn eos-nq" data-e="nextq"${no >= total ? ' disabled' : ''}>Next Question</button>
       <button class="eos-btn eos-nr" data-e="nextr"${reading && c.i < c.list.length - 1 ? '' : ' disabled'}>Next Reading</button>
     </div>
     <div class="eos-right"><div class="eos-rh">${esc(head)}</div>
@@ -192,8 +196,7 @@ function onClick(e) {
   const c = cur();
   switch (t.dataset.e) {
     case 'tab': S.tab = t.dataset.t; S.qi = 0; paint(); break;
-    case 'q': { const i = +t.dataset.i; if (c.tab === 'reading') S.qi = i; else S.pos[c.tab] = i; paint(); break; }
-    case 'nextq': { if (c.tab === 'reading') S.qi = Math.min(S.qi + 1, c.item.qs.length - 1); else S.pos[c.tab] = Math.min(c.i + 1, c.list.length - 1); paint(); break; }
+    case 'nextq': { if (c.tab === 'reading') { if (S.qi < c.item.qs.length - 1) S.qi++; else if (c.i < c.list.length - 1) { S.pos.reading = c.i + 1; S.qi = 0; } } else S.pos[c.tab] = Math.min(c.i + 1, c.list.length - 1); paint(); break; }
     case 'nextr': S.pos.reading = Math.min(c.i + 1, c.list.length - 1); S.qi = 0; paint(); break;
     case 'show': S.hide = !S.hide; { const x = document.getElementById('eosText'); if (x) x.textContent = S.hide ? '' : textOf(c); } break;
     case 'fin': tryFinish(); break;
