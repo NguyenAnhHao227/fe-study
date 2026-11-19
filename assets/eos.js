@@ -12,7 +12,7 @@
 'use strict';
 const L = 'ABCDEFGH';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const TABS = [['reading', 'Reading']]; // hiện chỉ có phần Reading (mc/mistake/matching/fill đã bỏ khỏi giao diện)
+const TABS = [['reading', 'Question']]; // hiện chỉ có phần Reading (mc/mistake/matching/fill đã bỏ khỏi giao diện)
 const FONTS = ['Microsoft Sans Serif', 'Arial', 'Tahoma', 'Segoe UI', 'Verdana', 'Times New Roman', 'Courier New'];
 
 /* ---- đề mẫu (tự viết, chỉ để thử giao diện) ---- */
