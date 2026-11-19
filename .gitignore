@@ -13,4 +13,4 @@ data/*.tmp
 translate-queue/
 explain-queue/
 backups/
-GIAO-VIEC-TAT-CA.txt
+GIAO-VIEC-*.txt

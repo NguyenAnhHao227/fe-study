@@ -128,3 +128,16 @@ Mở `https://<user>.github.io/<repo>/admin.html` và nhập **mật khẩu qu�
   - Muốn đồng bộ tự động thật sự cần backend (Firebase/Supabase…) — chưa làm.
 - **API key** chỉ lưu trong trình duyệt người dùng, không nằm trong mã nguồn. Mỗi người tự nhập key của mình.
 - Repo công khai = ngân hàng câu hỏi (`data/*.js`) công khai. Cân nhắc để repo private hoặc bản quyền đề thi.
+
+
+## Giao diện thi EOS (làm quen)
+
+Nút **🖥 EOS** ở thanh trên cùng mở giao diện phòng thi giống phần mềm EOS của trường (`#/eos`): chọn kỳ + môn rồi Start (`#/eos/<MÃ MÔN>`).
+Code nằm trong `assets/eos.js` (+ phần `.eos*` trong `assets/style.css`). Hiện mọi môn dùng một đề mẫu ngắn.
+Khi có đề thật cho một môn, thêm một file `data/eos-<mã>.js` rồi nạp trước `assets/eos.js` trong `index.html`:
+
+```js
+window.EOS_EXAMS = window.EOS_EXAMS || {};
+window.EOS_EXAMS.CEA201 = { duration: 60, reading: [...], mc: [...], mistake: [...], matching: [...], fill: [...] };
+```
+(cùng dạng dữ liệu với `DEMO` ở đầu `assets/eos.js`).

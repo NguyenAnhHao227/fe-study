@@ -33,6 +33,8 @@ const SUBJECTS = [
 const SUBJ = Object.fromEntries(SUBJECTS.map(s => [s.code, s]));
 const TERMS = [...new Set(SUBJECTS.map(s => s.k))].sort((a, b) => a - b);
 const subjectsOf = k => SUBJECTS.filter(s => s.k === k);
+const eosLink = code => `<div class="eoslink"><button class="btn sm" data-act="eos-subject" data-code="${code}">🖥 Thi thử giao diện EOS</button></div>`;
+const eosCtx = () => ({ SUBJ, TERMS, subjectsOf, student: (typeof PROFILE !== 'undefined' && PROFILE && PROFILE.name) || '1', go: h => go(h), exit: () => go('#/home') });
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -318,6 +320,7 @@ function topbar() {
   return `<header class="topbar"><div class="wrap">
     <button class="brand" data-act="home"><i>FE</i><span class="bt">FE Study</span></button><span class="grow"></span>
     <button class="chip-user" data-act="who" title="Đổi người dùng"><span class="av" style="background:${PROFILE.color}">${esc(initial(PROFILE.name))}</span>${esc(PROFILE.name)}</button>
+    <button class="eos-switch" data-act="eos" title="Chuyển sang giao diện thi EOS">🖥 EOS</button>
     ${bellBtn()}
     <button class="icon-btn" data-act="theme" title="Sáng / tối">◐</button>
     <button class="icon-btn" data-act="settings" title="Cài đặt AI & sao lưu">⚙</button>
@@ -396,6 +399,7 @@ function viewSets(code) { // môn có nhiều mục: chọn mục trước khi v
   return `${topbar()}<main class="wrap" style="--c:${S.color}">
     <div class="crumb"><button class="link" data-act="open-term" data-k="${S.k}">← Kỳ ${S.k}</button></div>
     <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}</h1><div class="muted">${esc(S.name)}</div></div></div>
+    ${eosLink(code)}
     ${A && A.subj === code ? `<div class="banner"><span>⏱ Đang làm dở <b>${esc(A.title)}</b> (${A.items.filter(i => i.pick != null).length}/${A.items.length} câu).</span><span class="grow"></span><button class="btn pri sm" data-act="resume">Làm tiếp</button></div><br>` : ''}
     <h2 class="sets-h">Bạn muốn ôn đề nào?</h2>
     <div class="setcards">${b.sets.map(x => { const st = stats(code, x.id); return `
@@ -417,7 +421,7 @@ function viewSubject(code, set = '') {
   const topicIdx = b.topics.map((t, i) => i).filter(i => inTopic(i).length);
   const head = `${topbar()}<main class="wrap" style="--c:${S.color}">
     <div class="crumb"><button class="link" data-act="${hasSets ? 'open-subject' : 'open-term'}" ${hasSets ? `data-code="${code}"` : `data-k="${S.k}"`}>${hasSets ? '← ' + S.code + ' · chọn mục khác' : '← Kỳ ' + S.k}</button></div>
-    <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}${SI ? ` <span class="setbadge">${SI.icon || ''} ${esc(SI.name)}</span>` : ''}</h1><div class="muted">${esc(S.name)}</div></div></div>`;
+    <div class="shead"><div class="ic">${S.icon}</div><div><h1>${S.code}${SI ? ` <span class="setbadge">${SI.icon || ''} ${esc(SI.name)}</span>` : ''}</h1><div class="muted">${esc(S.name)}</div></div></div>${eosLink(code)}`;
   if (b.empty) return head + `<div class="panel empty"><h2>Chưa có câu hỏi cho ${S.code}</h2>
     <p>Nhập file ngân hàng câu hỏi (<code>.docx</code>, <code>.txt</code> hoặc <code>.json</code>) theo cùng định dạng với file CSI106 mẫu.</p>
     <button class="btn pri big" data-act="import-bank" data-code="${code}">＋ Nhập ngân hàng câu hỏi</button></div></main>`;
@@ -759,9 +763,13 @@ function render(keep) {
   else if (r.name === 's' && SUBJ[r.arg]) html = viewSubject(r.arg, r.arg2);
   else if (r.name === 'exam') { if (!PROFILE.active) { location.hash = '#/home'; return; } html = viewExam(); }
   else if (r.name === 'result') { html = viewResult(r.arg); if (!html) { location.hash = '#/home'; return; } }
+  else if (r.name === 'eos') { html = window.EOS.view(r.arg, eosCtx()); if (html == null) { location.hash = '#/eos'; return; } }
   else { location.hash = '#/'; return; }
   if (r.name !== 'exam') stopTimer();
+  if (r.name !== 'eos') window.EOS.stop();
+  document.body.classList.toggle('eos-on', r.name === 'eos');
   app.innerHTML = html;
+  if (r.name === 'eos') { window.EOS.mount(app, eosCtx()); document.title = 'EOS' + (r.arg ? ' · ' + r.arg : '') + ' · FE Study'; window.scrollTo(0, 0); return; }
   if (['home', 'k', 's', 'exam', 'result'].includes(r.name)) { trackOnce('visit', {}); if (r.name === 's') trackOnce('s:' + r.arg, { subject: r.arg }); }
   if (PROFILE && PROFILE.settings.vi && (r.name === 'exam' || r.name === 'result')) scheduleTranslate(); // dịch AI chủ động phần còn thiếu
   if (r.name !== 'exam') setTimeout(maybeAnnounce, 450); // thông báo "Có gì mới" (đúng một lần)
@@ -911,6 +919,8 @@ const A = {
     DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
   },
   'open-term': el => go('#/k/' + el.dataset.k),
+  eos: () => go('#/eos'),
+  'eos-subject': el => go('#/eos/' + el.dataset.code),
   'open-subject': el => go('#/s/' + el.dataset.code + (el.dataset.set ? '/' + el.dataset.set : '')),
   'open-set': el => go('#/s/' + route().arg + '/' + el.dataset.set),
   'import-bank': el => importBank(el.dataset.code),

@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-19-giao-dien-eos',
+    title: 'Thêm giao diện thi EOS để làm quen',
+    date: '19/11/2026',
+    items: [
+      { icon: '🖥', text: 'Bấm nút EOS ở góc trên để vào giao diện phòng thi giống phần mềm EOS của trường: đồng hồ đếm ngược, 5 phần Reading, Multiple Choices, Indicate Mistake, Matching, Fill Blank.' },
+      { icon: '🎓', text: 'Chọn kỳ và môn rồi bấm Start. Hiện chưa có đề của trường nên đang dùng đề mẫu ngắn, chỉ để làm quen giao diện.' },
+    ],
+  },
+  {
     id: '2026-11-17-chon-ky',
     title: 'Chọn kỳ học trước khi chọn môn',
     date: '17/11/2026',
