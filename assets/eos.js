@@ -86,9 +86,8 @@ function qCount(c) {
 }
 function panelHTML() {
   const c = cur(), reading = c.tab === 'reading';
-  const label = TABS.find(t => t[0] === c.tab)[1];
   const [no, total] = qCount(c);
-  const head = c.item ? `${label} ${no}/${total}:` : `${label}:`;
+  const head = c.item ? `Question ${no}/${total}:` : 'Question:';
   return `<div class="eos-left">
       <div class="eos-ah">Answer</div>
       <div class="eos-ans" id="eosAns">${ansHTML(c)}</div>
