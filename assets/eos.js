@@ -1,18 +1,18 @@
-/* EOS — giao diện phòng thi EOS để làm quen (Reading / Multiple Choices / Indicate Mistake / Matching / Fill Blank).
+/* EOS — giao diện phòng thi EOS để làm quen (hiện chỉ có phần Reading).
  * Dùng như một "chế độ" của FE Study: nút EOS ở thanh trên cùng -> chọn kỳ, môn -> vào màn thi.
  *
  *   #/eos          : màn chọn kỳ + môn
  *   #/eos/<MÃ MÔN> : màn thi EOS
  *
  * Hiện CHƯA có đề thật: mọi môn dùng chung một đề mẫu ngắn (DEMO) chỉ để làm quen giao diện.
- * Khi có đề thật cho một môn, gán  window.EOS_EXAMS['CEA201'] = { duration: 60, reading: [...], mc: [...], mistake: [...], matching: [...], fill: [...] }
+ * Khi có đề thật cho một môn, gán  window.EOS_EXAMS['CEA201'] = { duration: 60, reading: [...] }
  * (cùng dạng dữ liệu với DEMO bên dưới) là màn thi tự dùng đề đó.
  */
 (() => {
 'use strict';
 const L = 'ABCDEFGH';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const TABS = [['reading', 'Reading'], ['mc', 'Multiple Choices'], ['mistake', 'Indicate Mistake'], ['matching', 'Matching'], ['fill', 'Fill Blank']];
+const TABS = [['reading', 'Reading']]; // hiện chỉ có phần Reading (mc/mistake/matching/fill đã bỏ khỏi giao diện)
 const FONTS = ['Microsoft Sans Serif', 'Arial', 'Tahoma', 'Segoe UI', 'Verdana', 'Times New Roman', 'Courier New'];
 
 /* ---- đề mẫu (tự viết, chỉ để thử giao diện) ---- */
@@ -29,21 +29,6 @@ const DEMO = {
         { q: 'What executes the instructions stored in memory?', opts: ['The processor', 'The keyboard', 'The monitor'], a: 'A', mark: 1 },
         { q: 'What do input/output devices do?', opts: ['Store the instructions', 'Let the computer communicate with users', 'Cool the processor'], a: 'B', mark: 1 },
       ] },
-  ],
-  mc: [
-    { q: 'Which component is known as the "brain" of the computer?', opts: ['CPU', 'RAM', 'Hard disk', 'Monitor'], a: 'A', mark: 0.5 },
-    { q: '1 byte equals how many bits?', opts: ['4', '8', '16', '32'], a: 'B', mark: 0.5 },
-    { q: 'Which of the following memories is volatile?', opts: ['ROM', 'SSD', 'RAM', 'Hard disk'], a: 'C', mark: 0.5 },
-  ],
-  mistake: [
-    { q: 'Choose the part of the sentence that is incorrect.\n\nShe (A) don\'t like (B) coffee, but she (C) drinks tea (D) every day.', opts: ['(A)', '(B)', '(C)', '(D)'], a: 'A', mark: 1 },
-  ],
-  matching: [
-    { q: 'Match each term with its description.', left: ['CPU', 'RAM', 'ROM'], right: ['Read-only memory', 'Executes instructions', 'Temporary working memory'], a: ['B', 'C', 'A'], mark: 3 },
-  ],
-  fill: [
-    { q: 'The binary number system uses only the digits 0 and ______.', a: '1', mark: 1 },
-    { q: 'The exam software used at FPT University is called ______.', a: 'EOS', mark: 1 },
   ],
 };
 
@@ -169,7 +154,7 @@ function pickerHTML(ctx) {
       <p>Chọn <b>kỳ</b> và <b>môn</b> để vào giao diện thi EOS.</p>
       <label>Kỳ<select id="eosTerm">${ctx.TERMS.map(k => `<option value="${k}">Kỳ ${k}</option>`).join('')}</select></label>
       <label>Môn<select id="eosSubj">${subjOpts(ctx, t0)}</select></label>
-      <p class="eos-note">Hiện chưa có đề của trường, nên màn thi dùng đề mẫu ngắn (đủ 5 phần: Reading, Multiple Choices, Indicate Mistake, Matching, Fill Blank) chỉ để quen giao diện.</p>
+      <p class="eos-note">Hiện chưa có đề của trường, nên màn thi dùng đề mẫu ngắn (phần Reading) chỉ để quen giao diện.</p>
       <div class="eos-pf"><button class="eos-btn" id="eosBack">← Quay lại FE Study</button><button class="eos-btn eos-go" id="eosStart">Start</button></div>
     </div></div></div>`;
 }
@@ -247,9 +232,13 @@ function view(arg, ctx) {
   if (!S || S.code !== arg) newSession(arg, ctx);
   return examHTML(ctx);
 }
+let onFit = null;
 function mount(root, ctx) {
   CTX = ctx;
   const el = root.querySelector('.eos'); if (!el) return;
+  removeEventListener('resize', onFit);
+  onFit = () => { const e = document.querySelector('.eos-stage'); const w = document.querySelector('.eos'); if (e && w) w.style.setProperty('--fit', Math.min(1, w.clientWidth / 1100).toFixed(3)); };
+  onFit(); addEventListener('resize', onFit);
   if (el.classList.contains('eos-pickwrap')) {
     const term = el.querySelector('#eosTerm'), subj = el.querySelector('#eosSubj');
     term.addEventListener('change', () => { subj.innerHTML = subjOpts(ctx, +term.value); });
@@ -260,7 +249,7 @@ function mount(root, ctx) {
   el.addEventListener('click', onClick); el.addEventListener('change', onChange); el.addEventListener('input', onInput);
   startTimer();
 }
-function stop() { clearInterval(tick); tick = null; S = null; }
+function stop() { clearInterval(tick); tick = null; S = null; if (onFit) { removeEventListener('resize', onFit); onFit = null; } }
 
 window.EOS = { view, mount, stop };
 })();

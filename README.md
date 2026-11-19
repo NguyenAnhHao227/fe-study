@@ -138,6 +138,6 @@ Khi có đề thật cho một môn, thêm một file `data/eos-<mã>.js` rồi 
 
 ```js
 window.EOS_EXAMS = window.EOS_EXAMS || {};
-window.EOS_EXAMS.CEA201 = { duration: 60, reading: [...], mc: [...], mistake: [...], matching: [...], fill: [...] };
+window.EOS_EXAMS.CEA201 = { duration: 60, reading: [...] };
 ```
 (cùng dạng dữ liệu với `DEMO` ở đầu `assets/eos.js`).
