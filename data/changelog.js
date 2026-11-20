@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-20-ssa101-giai-thich',
+    title: 'SSA101: thêm lời giải thích song ngữ',
+    date: '20/11/2026',
+    items: [
+      { icon: '📝', text: 'Hơn 180 câu SSA101 giờ có lời giải thích tiếng Anh và tiếng Việt, hiện ngay sau khi chọn đáp án.' },
+      { icon: '🌐', text: 'Bổ sung thêm bản dịch tiếng Việt cho nhiều câu hỏi SSA101 và thêm 1 câu mới.' },
+    ],
+  },
+  {
     id: '2026-11-19-giao-dien-eos',
     title: 'Thêm giao diện thi EOS để làm quen',
     date: '19/11/2026',
