@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-20-ssa101-tach-muc',
+    title: 'SSA101: tách thành hai mục',
+    date: '20/11/2026',
+    items: [
+      { icon: '🆕', text: 'Bấm vào SSA101 sẽ chọn mục trước: Source của Thành (255 câu mới) hoặc Source cũ (103 câu).' },
+      { icon: '📊', text: 'Tiến độ và câu sai được tính riêng cho từng mục.' },
+    ],
+  },
+  {
     id: '2026-11-20-ssa101-giai-thich',
     title: 'SSA101: thêm lời giải thích song ngữ',
     date: '20/11/2026',

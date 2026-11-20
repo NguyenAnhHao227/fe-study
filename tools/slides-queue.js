@@ -3,7 +3,7 @@
  * bằng AI có sẵn (ChatGPT / Gemini / Antigravity… loại truy cập được thư mục), rồi NHẬP vào ngân hàng câu hỏi của môn.
  *
  *   node tools/slides-queue.js prepare --images "<thư mục ảnh>" [--code SSA101] [--size 10] [--force]   chia ảnh thành lô, tạo slides-extract/
- *   node tools/slides-queue.js import [--check]                                                         nhập kết quả (slides-extract/done/) vào data/<môn>.js
+ *   node tools/slides-queue.js import [--check] [--set new --set-name "Source mới" --old-name "Source cũ"]                                                         nhập kết quả (slides-extract/done/) vào data/<môn>.js
  *   node tools/slides-queue.js status | prompt [--from N --to M]   (prompt có --from/--to: tạo tệp giao việc riêng cho khoảng lô N..M)
  *
  * Quy tắc nhập (an toàn, chạy lại nhiều lần được):
@@ -24,6 +24,8 @@ const QDIR = path.resolve(root, String(arg('dir', 'slides-extract')));
 const CODE = String(arg('code', 'SSA101')).toUpperCase();
 const SIZE = Math.max(3, Math.min(25, parseInt(arg('size', '10'), 10) || 10));
 const CHECK = !!arg('check', false), FORCE = !!arg('force', false);
+const SETID = arg('set') && arg('set') !== true ? String(arg('set')) : null;       // gắn các câu lấy từ slide vào một MỤC riêng (vd: --set new), phần còn lại của môn thành mục 'src'
+const SET_NAME = String(arg('set-name', 'Source mới')), OLD_NAME = String(arg('old-name', 'Source cũ'));
 const L = 'ABCDEFGH';
 
 const norm = s => String(s || '').toLowerCase().replace(/[‘’´`]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').replace(/[\s.:?!;,]+$/, '').trim();
@@ -182,7 +184,7 @@ function doImport() {
   const byNorm = new Map(); for (const q of bank.questions) { const k = norm(q.t); (byNorm.get(k) || byNorm.set(k, []).get(k)).push(q); }
   let nextNo = Math.max(0, ...bank.questions.map(q => +(String(q.id).match(/(\d+)$/) || [0, 0])[1])) + 1;
   const st = { batchesIn: 0, wait: 0, files: 0, skip: 0, missing: [], bad: [], unread: [], filledE: 0, filledTv: 0, same: 0, added: 0, conflicts: [] };
-  const added = [];
+  const added = [], marked = new Set();
   for (const b of M.batches) {
     const f = path.join(QDIR, 'done', b.name + '.txt');
     if (!fs.existsSync(f)) { st.wait++; continue; }
@@ -206,6 +208,7 @@ function doImport() {
       if (cands) q = cands.length === 1 ? cands[0] : (cands.find(c => JSON.stringify(c.o.map(o => norm(o[1])).sort()) === JSON.stringify(it.opts.map(o => norm(o[1])).sort())) || cands[0]);
       if (!q) { // câu mới
         const nq = { id: `${CODE}_Q${String(nextNo++).padStart(3, '0')}`, t: it.q, o: it.opts.map(o => [o[0], o[1], '']), a: keys.join(''), s: 0 };
+        if (SETID) nq.g = SETID;
         if (it.vi) nq.tv = it.vi; if (it.e && it.v) { nq.e = it.e; nq.ev = it.v; }
         if (!CHECK) { bank.questions.push(nq); byNorm.set(norm(nq.t), [nq]); }
         added.push(`${tag} -> ${nq.id}`); st.added++; continue;
@@ -214,6 +217,7 @@ function doImport() {
         st.conflicts.push(`${q.id} (${tag})\n   Đề: ${q.t.replace(/\s+/g, ' ').slice(0, 140)}\n   Ngân hàng đang để: ${q.a} = ${correctTexts(q).join(' | ')}\n   Slide ghi: ${keys.join('')} = ${slideKeyTexts.join(' | ')}`);
         continue;
       }
+      if (SETID) { marked.add(q.id); if (!CHECK) q.g = SETID; }
       let did = false;
       if (it.vi && !q.tv) { if (!CHECK) q.tv = it.vi; st.filledTv++; did = true; }
       if (it.e && it.v && !realExpl(q.e)) { if (!CHECK) { q.e = it.e; q.ev = it.v; } st.filledE++; did = true; }
@@ -222,6 +226,7 @@ function doImport() {
   }
   console.log(`Lô đã có kết quả: ${st.batchesIn}/${M.batches.length}${st.wait ? ` (còn ${st.wait} lô chưa có trong done/)` : ''} | ảnh đã xử lý: ${st.files} (trong đó bỏ qua vì không phải câu hỏi: ${st.skip})`);
   console.log(`${CHECK ? 'Sẽ' : 'Đã'} điền: bản dịch ${st.filledTv}, giải thích ${st.filledE} | câu mới thêm: ${st.added} | đã đủ sẵn: ${st.same}`);
+  if (SETID) { const nNew = st.added; console.log(`Mục "${SET_NAME}": ${marked.size} câu đã có + ${nNew} câu mới${CHECK ? ' (sẽ gắn)' : ' (đã gắn)'} | còn lại ${bank.questions.length - marked.size - (CHECK ? 0 : nNew)} câu thuộc "${OLD_NAME}".`); }
   console.log(`Chưa đạt: thiếu ảnh ${st.missing.length}, lỗi định dạng ${st.bad.length}, chữ không rõ ${st.unread.length} | đáp án lệch với ngân hàng: ${st.conflicts.length}`);
   const show = (t, a) => { if (a.length) { console.log('\n' + t); a.slice(0, 10).forEach(x => console.log('  - ' + x)); if (a.length > 10) console.log(`  … và ${a.length - 10} mục nữa`); } };
   show('ẢNH CHƯA CÓ MỤC TRONG KẾT QUẢ (các lô đã làm):', st.missing); show('LỖI ĐỊNH DẠNG / THIẾU ĐÁP ÁN:', st.bad); show('CHỮ KHÔNG ĐỌC RÕ ([?]):', st.unread);
@@ -230,6 +235,10 @@ function doImport() {
   const report = [...st.conflicts.map(x => 'LỆCH ĐÁP ÁN: ' + x), ...st.bad.map(x => 'LỖI: ' + x), ...st.unread.map(x => 'KHÔNG RÕ: ' + x), ...added.map(x => 'CÂU MỚI: ' + x)];
   if (CHECK) return console.log('\n(--check: chưa ghi gì. Bỏ --check để nhập thật.)');
   fs.writeFileSync(path.join(QDIR, 'flags.txt'), report.join('\n\n') + '\n');
+  if (SETID) bank.sets = [
+    { id: SETID, name: SET_NAME, short: SET_NAME, desc: 'Bộ câu hỏi mới, lấy từ source của Thành.', icon: '🆕' },
+    { id: 'src', name: OLD_NAME, short: OLD_NAME, desc: 'Các câu hỏi từ nguồn đề cũ.', icon: '📚' },
+  ];
   saveBank(B);
   console.log('Đã ghi vào ' + path.relative(root, B.file) + '. Danh sách cần xem lại: ' + path.relative(root, path.join(QDIR, 'flags.txt')));
 }
