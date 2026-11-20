@@ -1,12 +1,13 @@
 /* EOS — giao diện phòng thi EOS để làm quen (hiện chỉ có phần Reading).
  * Dùng như một "chế độ" của FE Study: nút EOS ở thanh trên cùng -> chọn kỳ, môn -> vào màn thi.
  *
- *   #/eos          : màn chọn kỳ + môn
- *   #/eos/<MÃ MÔN> : màn thi EOS
+ *   #/eos               : màn chọn kỳ + môn
+ *   #/eos/<MÃ MÔN>      : môn CÓ ngân hàng câu hỏi -> màn thiết lập (chọn nguồn, số câu, thời gian)
+ *                         môn chưa có ngân hàng     -> vào thẳng màn thi với đề mẫu ngắn (DEMO)
+ *   #/eos/<MÃ MÔN>/exam : màn thi EOS (câu hỏi thật, lấy ngẫu nhiên từ ngân hàng theo thiết lập)
  *
- * Hiện CHƯA có đề thật: mọi môn dùng chung một đề mẫu ngắn (DEMO) chỉ để làm quen giao diện.
- * Khi có đề thật cho một môn, gán  window.EOS_EXAMS['CEA201'] = { duration: 60, reading: [...] }
- * (cùng dạng dữ liệu với DEMO bên dưới) là màn thi tự dùng đề đó.
+ * Mặc định không chỉnh gì: 50 câu ngẫu nhiên / 60 phút (lấy từ SUBJECTS[code].n / .min), thang điểm 10.
+ * Môn chưa có ngân hàng dùng đề mẫu (DEMO) để quen giao diện.
  */
 (() => {
 'use strict';
@@ -55,15 +56,27 @@ function newSession(code, ctx) {
   eachQ((t, q) => { S.total += q.mark || 0; });
 }
 
+/* đề từ ngân hàng câu hỏi: lấy ngẫu nhiên n câu trong các nguồn đã chọn, thang điểm 10 */
+function newBankSession(code, ctx, srcs, n, mins) {
+  const b = ctx.bank(code);
+  const pool = b.questions.filter(q => srcs.includes(ctx.gOf(q)) || srcs.includes(''));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const pick = pool.slice(0, n), mark = 10 / Math.max(1, pick.length);
+  const ex = { duration: mins, bank: true, reading: pick.map(q => ({ passage: '', qs: [{ q: q.t, opts: q.o.map(x => x[1]), a: [...q.a].sort().join(''), mark }] })) };
+  S = { code, exam: ex, bank: true, tab: 'reading', pos: {}, qi: 0, ans: {}, font: FONTS[0], size: 10, chk: false, submit: '', hide: false, done: false, dur: mins, endAt: Date.now() + mins * 60000, student: ctx.student || '1', total: 0 };
+  eachQ((t, q) => { S.total += q.mark || 0; });
+}
+
 const isChoice = tab => tab === 'reading' || tab === 'mc' || tab === 'mistake';
 const answered = (tab, q, a) => (tab === 'matching' ? Array.isArray(a) && q.left.every((_, j) => a[j]) : tab === 'fill' ? !!(a && String(a).trim()) : !!a);
-const correct = (tab, q, a) => (tab === 'matching' ? Array.isArray(a) && q.a.every((x, j) => a[j] === x) : tab === 'fill' ? norm(a) === norm(q.a) : a === q.a);
+const correct = (tab, q, a) => (tab === 'matching' ? Array.isArray(a) && q.a.every((x, j) => a[j] === x) : tab === 'fill' ? norm(a) === norm(q.a) : String(a).split('').sort().join('') === String(q.a).split('').sort().join(''));
 
 /* ---- hiển thị ---- */
 function textOf(c) {
   const { tab, item } = c;
   if (!item) return '(Không có câu hỏi trong phần này)';
   const opts = o => o.map((x, k) => `${L[k]}. ${x}`).join('\n');
+  if (tab === 'reading' && !item.passage && item.qs.length === 1) return item.qs[0].q + '\n\n' + opts(item.qs[0].opts);
   if (tab === 'reading') return item.passage + '\n\n' + item.qs.map((q, j) => `${j + 1}) ${q.q}\n${opts(q.opts)}`).join('\n\n');
   if (tab === 'matching') return item.q + '\n\n' + item.left.map((l, j) => `${j + 1}. ${l}`).join('\n') + '\n\n' + opts(item.right);
   if (tab === 'fill') return item.q;
@@ -74,7 +87,7 @@ function ansHTML(c) {
   const a = S.ans[keyOf(c)];
   if (c.tab === 'matching') return q.left.map((l, j) => `<div class="eos-mrow"><b>${j + 1}</b><select data-e="match" data-j="${j}">${['', ...q.right.map((_, x) => L[x])].map(o => `<option value="${o}"${a && a[j] === o ? ' selected' : ''}>${o}</option>`).join('')}</select></div>`).join('');
   if (c.tab === 'fill') return `<input class="eos-fill" data-e="fill" value="${esc(a || '')}" autocomplete="off" spellcheck="false">`;
-  return q.opts.map((o, x) => `<label class="eos-chk"><input type="checkbox" data-e="opt" data-v="${L[x]}"${a === L[x] ? ' checked' : ''}><span>${L[x]}</span></label>`).join('');
+  return q.opts.map((o, x) => `<label class="eos-chk"><input type="checkbox" data-e="opt" data-v="${L[x]}"${(a || '').includes(L[x]) ? ' checked' : ''}><span>${L[x]}</span></label>`).join('');
 }
 function textStyle() { return `font-family:'${S.font}',Tahoma,Arial,sans-serif;font-size:${(S.size * 1.45).toFixed(1)}px`; }
 /* số thứ tự câu hiện tại / tổng số câu (đếm xuyên suốt các bài đọc) */
@@ -92,7 +105,7 @@ function panelHTML() {
       <div class="eos-ah">Answer</div>
       <div class="eos-ans" id="eosAns">${ansHTML(c)}</div>
       <button class="eos-btn eos-nq" data-e="nextq"${no >= total ? ' disabled' : ''}>Next Question</button>
-      <button class="eos-btn eos-nr" data-e="nextr"${reading && c.i < c.list.length - 1 ? '' : ' disabled'}>Next Reading</button>
+      ${S.bank ? '' : `<button class="eos-btn eos-nr" data-e="nextr"${reading && c.i < c.list.length - 1 ? '' : ' disabled'}>Next Reading</button>`}
     </div>
     <div class="eos-right"><div class="eos-rh">${esc(head)}</div>
       <div class="eos-text" id="eosText" style="${textStyle()}">${S.hide ? '' : esc(textOf(c))}</div></div>`;
@@ -151,14 +164,32 @@ function examHTML(ctx) {
 
 function pickerHTML(ctx) {
   const t0 = ctx.TERMS[0];
-  return `<div class="eos eos-pickwrap"><div class="eos-pick">
+  return `<div class="eos eos-pickwrap" data-mode="pick"><div class="eos-pick">
     <div class="eos-pt">EOS · Làm quen giao diện thi</div>
     <div class="eos-pb">
       <p>Chọn <b>kỳ</b> và <b>môn</b> để vào giao diện thi EOS.</p>
       <label>Kỳ<select id="eosTerm">${ctx.TERMS.map(k => `<option value="${k}">Kỳ ${k}</option>`).join('')}</select></label>
       <label>Môn<select id="eosSubj">${subjOpts(ctx, t0)}</select></label>
-      <p class="eos-note">Hiện chưa có đề của trường, nên màn thi dùng đề mẫu ngắn (phần Reading) chỉ để quen giao diện.</p>
+      <p class="eos-note">Môn có ngân hàng câu hỏi (vd. SSA101) sẽ được chọn nguồn / số câu / thời gian rồi thi bằng câu hỏi thật. Môn chưa có thì dùng đề mẫu ngắn chỉ để quen giao diện.</p>
       <div class="eos-pf"><button class="eos-btn" id="eosBack">← Quay lại FE Study</button><button class="eos-btn eos-go" id="eosStart">Start</button></div>
+    </div></div></div>`;
+}
+function setupHTML(code, ctx) {
+  const s = ctx.SUBJ[code], b = ctx.bank(code);
+  const sets = b.sets && b.sets.length > 1 ? b.sets : [{ id: '', name: 'Tất cả câu hỏi' }];
+  const cnt = id => b.questions.filter(q => !id || ctx.gOf(q) === id).length;
+  const pool = b.questions.length;
+  return `<div class="eos eos-pickwrap" data-mode="setup" data-code="${esc(code)}"><div class="eos-pick">
+    <div class="eos-pt">EOS · ${esc(code)} — ${esc(s.name)}</div>
+    <div class="eos-pb">
+      <p>Chọn <b>nguồn câu hỏi</b> để vào thi:</p>
+      <div class="eos-srcs">${sets.map(x => `<label class="eos-srcrow"><input type="checkbox" class="eos-src" value="${esc(x.id)}" data-n="${cnt(x.id)}" checked><span>${esc(x.name)} <i>(${cnt(x.id)} câu)</i></span></label>`).join('')}</div>
+      <div class="eos-row2">
+        <label>Số câu<input type="number" id="eosN" min="1" value="${s.n || 50}"></label>
+        <label>Thời gian (phút)<input type="number" id="eosM" min="1" max="600" value="${s.min || 60}"></label>
+      </div>
+      <p class="eos-note" id="eosPool">Có <b>${pool}</b> câu trong nguồn đã chọn. Mặc định: ${s.n || 50} câu ngẫu nhiên / ${s.min || 60} phút.</p>
+      <div class="eos-pf"><button class="eos-btn" id="eosBack">← Chọn môn khác</button><button class="eos-btn eos-go" id="eosStart">Start</button></div>
     </div></div></div>`;
 }
 const subjOpts = (ctx, k) => ctx.subjectsOf(k).map(s => `<option value="${esc(s.code)}">${esc(s.code)} — ${esc(s.name)}</option>`).join('');
@@ -178,7 +209,10 @@ function box(title, body, btns) {
 function finish(timeUp) {
   if (S.done) return; S.done = true; clearInterval(tick);
   let n = 0, got = 0, right = 0; eachQ((tab, q, key) => { n++; const a = S.ans[key]; if (answered(tab, q, a)) { got++; if (correct(tab, q, a)) right += q.mark || 0; } });
-  box(timeUp ? 'Hết giờ' : 'Đã nộp bài', `${timeUp ? '<b>Hết giờ làm bài.</b> Bài của bạn đã được nộp tự động.<br><br>' : ''}Đã trả lời <b>${got}/${n}</b> câu.<br>Điểm đề mẫu: <b>${fm(right)}</b> / ${fm(S.total)}<div class="eos-note">Đây là đề mẫu để làm quen giao diện, chưa phải đề thật.</div>`, ['OK']).then(() => CTX.go('#/eos'));
+  const bank = S.bank, code = S.code;
+  let ok = 0; if (bank) eachQ((tab, q, key) => { if (answered(tab, q, S.ans[key]) && correct(tab, q, S.ans[key])) ok++; });
+  const body = bank ? `Đã trả lời <b>${got}/${n}</b> câu — đúng <b>${ok}</b> câu.<br>Điểm: <b>${fm(right)}</b> / ${fm(S.total)}` : `Đã trả lời <b>${got}/${n}</b> câu.<br>Điểm đề mẫu: <b>${fm(right)}</b> / ${fm(S.total)}<div class="eos-note">Đây là đề mẫu để làm quen giao diện, chưa phải đề thật.</div>`;
+  box(timeUp ? 'Hết giờ' : 'Đã nộp bài', `${timeUp ? '<b>Hết giờ làm bài.</b> Bài của bạn đã được nộp tự động.<br><br>' : ''}${body}`, ['OK']).then(() => CTX.go('#/eos/' + code));
 }
 async function tryFinish() {
   if (S.done) return;
@@ -199,14 +233,18 @@ function onClick(e) {
     case 'nextr': S.pos.reading = Math.min(c.i + 1, c.list.length - 1); S.qi = 0; paint(); break;
     case 'show': S.hide = !S.hide; { const x = document.getElementById('eosText'); if (x) x.textContent = S.hide ? '' : textOf(c); } break;
     case 'fin': tryFinish(); break;
-    case 'exit': box('Exit', S.done ? 'Thoát khỏi EOS?' : 'Thoát khỏi bài thi? Bài làm hiện tại sẽ <b>không được lưu</b>.', ['Yes', 'No']).then(b => { if (b === 'Yes') CTX.exit(); }); break;
+    case 'exit': box('Exit', S.done ? 'Thoát khỏi EOS?' : 'Thoát khỏi bài thi? Bài làm hiện tại sẽ <b>không được lưu</b>.', ['Yes', 'No']).then(b => { if (b === 'Yes') { if (S && S.bank) CTX.go('#/s/' + S.code); else CTX.exit(); } }); break;
   }
 }
 function onChange(e) {
   if (!S) return;
   const t = e.target, d = t.dataset && t.dataset.e; if (!d) return;
   const c = cur();
-  if (d === 'opt') { const k = keyOf(c); if (t.checked) S.ans[k] = t.dataset.v; else delete S.ans[k]; const a = document.getElementById('eosAns'); if (a) a.innerHTML = ansHTML(c); }
+  if (d === 'opt') {
+    const k = keyOf(c), q = curQ(c), v = t.dataset.v;
+    if (q && String(q.a).length > 1) { const set = new Set((S.ans[k] || '').split('').filter(Boolean)); if (t.checked) set.add(v); else set.delete(v); const str = [...set].sort().join(''); if (str) S.ans[k] = str; else delete S.ans[k]; }
+    else if (t.checked) S.ans[k] = v; else delete S.ans[k];
+    const a = document.getElementById('eosAns'); if (a) a.innerHTML = ansHTML(c); }
   else if (d === 'chk') { S.chk = t.checked; document.querySelectorAll('.eos [data-e=chk]').forEach(x => { x.checked = S.chk; }); const b = document.getElementById('eosFinTop'); if (b) b.disabled = !S.chk; }
   else if (d === 'font') { S.font = t.value; const x = document.getElementById('eosText'); if (x) x.setAttribute('style', textStyle()); }
   else if (d === 'match') { const k = keyOf(c), q = curQ(c); const a = S.ans[k] || (S.ans[k] = q.left.map(() => '')); a[+t.dataset.j] = t.value; }
@@ -226,12 +264,22 @@ function startTimer() {
   upd(); if (!S.done) tick = setInterval(upd, 250);
 }
 
+/* toàn màn hình (như F11) — chỉ gọi được từ một cú bấm của người dùng */
+function fullscreen() { try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
+function unfullscreen() { try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (e) {} }
+
 /* ---- giao tiếp với app.js ---- */
-function view(arg, ctx) {
+function view(arg, ctx, arg2) {
   CTX = ctx;
   if (!arg) { stop(); return pickerHTML(ctx); }
   if (!ctx.SUBJ[arg]) return null;
-  if (!S || S.code !== arg) newSession(arg, ctx);
+  const b = ctx.bank(arg), hasBank = (ctx.eosBanks || []).includes(arg) && !b.empty && b.questions.length > 0;
+  if (hasBank) {
+    if (arg2 === 'exam' && S && S.code === arg && S.bank) return examHTML(ctx);
+    stop(); return arg2 === 'exam' ? '#/eos/' + arg : setupHTML(arg, ctx);
+  }
+  if (arg2 === 'exam') return '#/eos/' + arg;
+  if (!S || S.code !== arg || S.bank) newSession(arg, ctx);
   return examHTML(ctx);
 }
 let onFit = null;
@@ -239,12 +287,26 @@ function mount(root, ctx) {
   CTX = ctx;
   const el = root.querySelector('.eos'); if (!el) return;
   removeEventListener('resize', onFit);
-  onFit = () => { const e = document.querySelector('.eos-stage'); const w = document.querySelector('.eos'); if (e && w) w.style.setProperty('--fit', Math.min(1, w.clientWidth / 1100).toFixed(3)); };
+  /* thu nhỏ phần đầu theo cả chiều rộng lẫn chiều cao để cả màn thi vừa khít khung nhìn, không phải cuộn */
+  onFit = () => { const e = document.querySelector('.eos-stage'); const w = document.querySelector('.eos'); if (!e || !w) return; const byH = innerWidth > 900 ? Math.max(0.45, (innerHeight - 428) / 212) : 1; w.style.setProperty('--fit', Math.min(1, w.clientWidth / 1100, byH).toFixed(3)); };
   onFit(); addEventListener('resize', onFit);
+  if (el.dataset.mode === 'setup') {
+    const code = el.dataset.code, srcs = [...el.querySelectorAll('.eos-src')], N = el.querySelector('#eosN'), M = el.querySelector('#eosM'), go = el.querySelector('#eosStart'), note = el.querySelector('#eosPool');
+    const pool = () => srcs.filter(x => x.checked).reduce((a, x) => a + (+x.dataset.n), 0);
+    const upd = () => { const p = pool(); N.max = p; go.disabled = p === 0; note.innerHTML = p ? `Có <b>${p}</b> câu trong nguồn đã chọn${(+N.value || 0) > p ? ` — sẽ thi <b>${p}</b> câu` : ''}.` : 'Hãy chọn ít nhất một nguồn câu hỏi.'; };
+    srcs.forEach(x => x.addEventListener('change', upd)); N.addEventListener('input', upd); upd();
+    el.querySelector('#eosBack').addEventListener('click', () => ctx.go('#/eos'));
+    go.addEventListener('click', () => {
+      const ids = srcs.filter(x => x.checked).map(x => x.value), p = pool(); if (!p) return;
+      const n = Math.max(1, Math.min(p, parseInt(N.value, 10) || 50)), mins = Math.max(1, Math.min(600, parseInt(M.value, 10) || 60));
+      newBankSession(code, ctx, ids, n, mins); fullscreen(); ctx.go('#/eos/' + code + '/exam');
+    });
+    return;
+  }
   if (el.classList.contains('eos-pickwrap')) {
     const term = el.querySelector('#eosTerm'), subj = el.querySelector('#eosSubj');
     term.addEventListener('change', () => { subj.innerHTML = subjOpts(ctx, +term.value); });
-    el.querySelector('#eosStart').addEventListener('click', () => { if (subj.value) ctx.go('#/eos/' + subj.value); });
+    el.querySelector('#eosStart').addEventListener('click', () => { if (subj.value) { fullscreen(); ctx.go('#/eos/' + subj.value); } });
     el.querySelector('#eosBack').addEventListener('click', () => ctx.exit());
     return;
   }
@@ -253,5 +315,5 @@ function mount(root, ctx) {
 }
 function stop() { clearInterval(tick); tick = null; S = null; if (onFit) { removeEventListener('resize', onFit); onFit = null; } }
 
-window.EOS = { view, mount, stop };
+window.EOS = { view, mount, stop, fullscreen, unfullscreen };
 })();

@@ -330,6 +330,23 @@ body.eos-on{background:#fff}
 .eos-mbf{display:flex;justify-content:flex-end;gap:8px;padding:10px 12px}
 .eos-mbf .eos-btn{min-width:78px;height:26px}
 
+/* thiết lập thi (chọn nguồn / số câu / thời gian) */
+.eos-srcs{display:flex;flex-direction:column;gap:6px}
+.eos-pb label.eos-srcrow{flex-direction:row;align-items:center;gap:8px;cursor:pointer}
+.eos-srcrow input{width:15px;height:15px;margin:0}
+.eos-srcrow i{color:#666;font-style:normal;font-size:13px}
+.eos-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.eos-pb input[type=number]{height:28px;border:1px solid #7a7a7a;background:#fff;padding:0 6px;font-size:14px;width:100%}
+.eos-go:disabled{opacity:.5;cursor:default}
+
+/* toàn màn hình, vừa khít, không có thanh cuộn (màn rộng) */
+@media (min-width:901px){
+  html:has(body.eos-on){overflow:hidden}
+  body.eos-on{overflow:hidden}
+  .eos{height:100vh;height:100dvh;min-height:0;overflow:hidden}
+  .eos-panel{min-height:330px;overflow:hidden}
+}
+
 @media (max-width:900px){
   .eos-panel{margin:0 8px;min-height:0;display:flex;flex-direction:column}
   .eos-left{position:relative;width:auto;height:auto;display:grid;grid-template-columns:1fr;grid-template-areas:"ah" "ans" "nq" "nr";gap:6px 12px;padding:10px 12px;align-items:start}

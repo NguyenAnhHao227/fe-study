@@ -133,7 +133,10 @@ Mở `https://<user>.github.io/<repo>/admin.html` và nhập **mật khẩu qu�
 ## Giao diện thi EOS (làm quen)
 
 Nút **🖥 EOS** ở thanh trên cùng mở giao diện phòng thi giống phần mềm EOS của trường (`#/eos`): chọn kỳ + môn rồi Start (`#/eos/<MÃ MÔN>`).
-Code nằm trong `assets/eos.js` (+ phần `.eos*` trong `assets/style.css`). Hiện mọi môn dùng một đề mẫu ngắn.
+Code nằm trong `assets/eos.js` (+ phần `.eos*` trong `assets/style.css`). Vào EOS tự bật toàn màn hình và vừa khít khung nhìn (không cuộn).
+Môn nào nằm trong `EOS_BANKS` (đầu `assets/app.js`, hiện chỉ **SSA101**) sẽ có bước thiết lập: chọn nguồn câu hỏi, số câu, thời gian
+(mặc định 50 câu ngẫu nhiên / 60 phút, thang điểm 10) rồi thi bằng câu hỏi thật (`#/eos/<MÃ MÔN>/exam`). Muốn thêm môn: thêm mã vào `EOS_BANKS`.
+Các môn còn lại dùng một đề mẫu ngắn.
 Khi có đề thật cho một môn, thêm một file `data/eos-<mã>.js` rồi nạp trước `assets/eos.js` trong `index.html`:
 
 ```js

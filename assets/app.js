@@ -34,7 +34,8 @@ const SUBJ = Object.fromEntries(SUBJECTS.map(s => [s.code, s]));
 const TERMS = [...new Set(SUBJECTS.map(s => s.k))].sort((a, b) => a - b);
 const subjectsOf = k => SUBJECTS.filter(s => s.k === k);
 const eosLink = code => `<div class="eoslink"><button class="btn sm" data-act="eos-subject" data-code="${code}">🖥 Thi thử giao diện EOS</button></div>`;
-const eosCtx = () => ({ SUBJ, TERMS, subjectsOf, student: (typeof PROFILE !== 'undefined' && PROFILE && PROFILE.name) || '1', go: h => go(h), exit: () => go('#/home') });
+const EOS_BANKS = ['SSA101']; /* môn nào được thi EOS bằng câu hỏi thật: thêm mã môn vào đây khi cần (môn khác dùng đề mẫu) */
+const eosCtx = () => ({ SUBJ, TERMS, subjectsOf, bank: getBank, gOf, eosBanks: EOS_BANKS, student: (typeof PROFILE !== 'undefined' && PROFILE && PROFILE.name) || '1', go: h => go(h), exit: () => go('#/home') });
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -763,10 +764,10 @@ function render(keep) {
   else if (r.name === 's' && SUBJ[r.arg]) html = viewSubject(r.arg, r.arg2);
   else if (r.name === 'exam') { if (!PROFILE.active) { location.hash = '#/home'; return; } html = viewExam(); }
   else if (r.name === 'result') { html = viewResult(r.arg); if (!html) { location.hash = '#/home'; return; } }
-  else if (r.name === 'eos') { html = window.EOS.view(r.arg, eosCtx()); if (html == null) { location.hash = '#/eos'; return; } }
+  else if (r.name === 'eos') { html = window.EOS.view(r.arg, eosCtx(), r.arg2); if (html == null) { location.hash = '#/eos'; return; } if (html[0] === '#') { location.hash = html; return; } }
   else { location.hash = '#/'; return; }
   if (r.name !== 'exam') stopTimer();
-  if (r.name !== 'eos') window.EOS.stop();
+  if (r.name !== 'eos') { window.EOS.stop(); window.EOS.unfullscreen(); }
   document.body.classList.toggle('eos-on', r.name === 'eos');
   app.innerHTML = html;
   if (r.name === 'eos') { window.EOS.mount(app, eosCtx()); document.title = 'EOS' + (r.arg ? ' · ' + r.arg : '') + ' · FE Study'; window.scrollTo(0, 0); return; }
@@ -919,8 +920,8 @@ const A = {
     DB.del('p:' + p.id); DB.set('profiles', DB.get('profiles', []).filter(i => i !== p.id)); if (DB.get('cur') === p.id) { DB.del('cur'); PROFILE = null; } render();
   },
   'open-term': el => go('#/k/' + el.dataset.k),
-  eos: () => go('#/eos'),
-  'eos-subject': el => go('#/eos/' + el.dataset.code),
+  eos: () => { window.EOS.fullscreen(); go('#/eos'); },
+  'eos-subject': el => { window.EOS.fullscreen(); go('#/eos/' + el.dataset.code); },
   'open-subject': el => go('#/s/' + el.dataset.code + (el.dataset.set ? '/' + el.dataset.set : '')),
   'open-set': el => go('#/s/' + route().arg + '/' + el.dataset.set),
   'import-bank': el => importBank(el.dataset.code),

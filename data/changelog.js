@@ -8,6 +8,16 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-20-ssa101-thi-eos',
+    title: 'SSA101: thi thử giao diện EOS bằng câu hỏi thật',
+    date: '20/11/2026',
+    items: [
+      { icon: '🖥', text: 'Bấm "Thi thử giao diện EOS" ở SSA101 để chọn nguồn (Source của Thành / Source cũ, hoặc cả hai), số câu và thời gian.' },
+      { icon: '🎲', text: 'Mặc định không chỉnh gì: 50 câu ngẫu nhiên / 60 phút, chấm thang điểm 10.' },
+      { icon: '⛶', text: 'Vào EOS tự bật toàn màn hình và vừa khít, không còn thanh kéo lên xuống.' },
+    ],
+  },
+  {
     id: '2026-11-20-ssa101-tach-muc',
     title: 'SSA101: tách thành hai mục',
     date: '20/11/2026',
