@@ -8,6 +8,15 @@
  */
 window.CHANGELOG = [
   {
+    id: '2026-11-20-ssa101-dich-day-du',
+    title: 'SSA101: dịch và giải thích đầy đủ',
+    date: '20/11/2026',
+    items: [
+      { icon: '🇻🇳', text: 'Cả 358 câu SSA101 đã có bản dịch tiếng Việt cho câu hỏi và từng đáp án.' },
+      { icon: '💡', text: 'Mọi câu đều có giải thích ngắn bằng tiếng Anh và tiếng Việt.' },
+    ],
+  },
+  {
     id: '2026-11-20-ssa101-thi-eos',
     title: 'SSA101: thi thử giao diện EOS bằng câu hỏi thật',
     date: '20/11/2026',
