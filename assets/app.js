@@ -35,7 +35,8 @@ const TERMS = [...new Set(SUBJECTS.map(s => s.k))].sort((a, b) => a - b);
 const subjectsOf = k => SUBJECTS.filter(s => s.k === k);
 const eosLink = code => `<div class="eoslink"><button class="btn sm" data-act="eos-subject" data-code="${code}">🖥 Thi thử giao diện EOS</button></div>`;
 const EOS_BANKS = ['SSA101']; /* môn nào được thi EOS bằng câu hỏi thật: thêm mã môn vào đây khi cần (môn khác dùng đề mẫu) */
-const eosCtx = () => ({ SUBJ, TERMS, subjectsOf, bank: getBank, gOf, eosBanks: EOS_BANKS, student: (typeof PROFILE !== 'undefined' && PROFILE && PROFILE.name) || '1', go: h => go(h), exit: () => go('#/home') });
+let eosBack = null; /* trang đang xem ngay trước khi vào EOS: thoát EOS thì quay đúng về đó */
+const eosCtx = () => ({ SUBJ, TERMS, subjectsOf, bank: getBank, gOf, eosBanks: EOS_BANKS, student: (typeof PROFILE !== 'undefined' && PROFILE && PROFILE.name) || '1', go: h => go(h), exit: code => go(eosBack || (code && SUBJ[code] ? '#/s/' + code : '#/home')) });
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -767,7 +768,7 @@ function render(keep) {
   else if (r.name === 'eos') { html = window.EOS.view(r.arg, eosCtx(), r.arg2); if (html == null) { location.hash = '#/eos'; return; } if (html[0] === '#') { location.hash = html; return; } }
   else { location.hash = '#/'; return; }
   if (r.name !== 'exam') stopTimer();
-  if (r.name !== 'eos') { window.EOS.stop(); window.EOS.unfullscreen(); }
+  if (r.name !== 'eos') { eosBack = location.hash || '#/home'; window.EOS.stop(); window.EOS.unfullscreen(); }
   document.body.classList.toggle('eos-on', r.name === 'eos');
   app.innerHTML = html;
   if (r.name === 'eos') { window.EOS.mount(app, eosCtx()); document.title = 'EOS' + (r.arg ? ' · ' + r.arg : '') + ' · FE Study'; window.scrollTo(0, 0); return; }

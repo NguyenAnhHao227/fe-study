@@ -194,7 +194,7 @@ function setupHTML(code, ctx) {
         <label>Thời gian (phút)<input type="number" id="eosM" min="1" max="600" value="${s.min || 60}"></label>
       </div>
       <p class="eos-note" id="eosPool">Có <b>${pool}</b> câu trong nguồn đã chọn. Mặc định: ${s.n || 50} câu ngẫu nhiên / ${s.min || 60} phút.</p>
-      <div class="eos-pf"><button class="eos-btn" id="eosBack">← Chọn môn khác</button><button class="eos-btn eos-go" id="eosStart">Start</button></div>
+      <div class="eos-pf"><span class="eos-pfl"><button class="eos-btn" id="eosExit">← Thoát</button><button class="eos-btn" id="eosBack">Chọn môn khác</button></span><button class="eos-btn eos-go" id="eosStart">Start</button></div>
     </div></div></div>`;
 }
 const subjOpts = (ctx, k) => ctx.subjectsOf(k).map(s => `<option value="${esc(s.code)}">${esc(s.code)} — ${esc(s.name)}</option>`).join('');
@@ -239,7 +239,7 @@ function onClick(e) {
     case 'nextr': S.pos.reading = Math.min(c.i + 1, c.list.length - 1); S.qi = 0; paint(); break;
     case 'show': S.hide = !S.hide; { const x = document.getElementById('eosText'); if (x) x.textContent = S.hide ? '' : textOf(c); } break;
     case 'fin': tryFinish(); break;
-    case 'exit': box('Exit', S.done ? 'Thoát khỏi EOS?' : 'Thoát khỏi bài thi? Bài làm hiện tại sẽ <b>không được lưu</b>.', ['Yes', 'No']).then(b => { if (b === 'Yes') { if (S && S.bank) CTX.go('#/s/' + S.code); else CTX.exit(); } }); break;
+    case 'exit': box('Exit', S.done ? 'Thoát khỏi EOS?' : 'Thoát khỏi bài thi? Bài làm hiện tại sẽ <b>không được lưu</b>.', ['Yes', 'No']).then(b => { if (b === 'Yes') CTX.exit(S && S.code); }); break;
   }
 }
 function onChange(e) {
@@ -303,6 +303,7 @@ function mount(root, ctx) {
     const upd = () => { const p = pool(); N.max = p; go.disabled = p === 0; note.innerHTML = p ? `Có <b>${p}</b> câu trong nguồn đã chọn${(+N.value || 0) > p ? ` — sẽ thi <b>${p}</b> câu` : ''}.` : 'Hãy chọn ít nhất một nguồn câu hỏi.'; };
     srcs.forEach(x => x.addEventListener('change', upd)); N.addEventListener('input', upd); upd();
     el.querySelector('#eosBack').addEventListener('click', () => ctx.go('#/eos'));
+    el.querySelector('#eosExit').addEventListener('click', () => ctx.exit(code));
     go.addEventListener('click', () => {
       const ids = srcs.filter(x => x.checked).map(x => x.value), p = pool(); if (!p) return;
       const n = Math.max(1, Math.min(p, parseInt(N.value, 10) || 50)), mins = Math.max(1, Math.min(600, parseInt(M.value, 10) || 60));
