@@ -297,7 +297,11 @@ body.eos-on{background:#fff}
 .eos-mrow select{width:60px;height:24px;border:1px solid #7a7a7a;background:#fff}
 .eos-fill{width:210px;height:26px;border:1px solid #7a7a7a;padding:0 6px;font-size:14px;user-select:text;-webkit-user-select:text}
 .eos-nq,.eos-nr{position:absolute;left:25px;width:117px;height:26px}
-.eos-nq{top:274px}.eos-nr{top:308px}
+.eos-pq{position:absolute;left:25px;width:140px;height:26px;padding:0;top:308px;white-space:nowrap}
+.eos-nq{top:274px}.eos-nr{top:342px}
+.eos-tabs{align-items:flex-end}
+.eos-prog{flex:1;max-width:880px;height:22px;margin:0 0 3px 150px;border:1px solid #bdbdbd;background:#f4f4f4;align-self:flex-end}
+.eos-prog i{display:block;height:100%;width:0;background:#2e9d4a;transition:width .25s}
 .eos-right{position:absolute;left:188px;right:12px;top:0;bottom:12px}
 .eos-rh{position:absolute;left:0;top:11px;font-size:18px;font-weight:700;color:#2e9d4a;line-height:22px}
 .eos-text{position:absolute;left:7px;right:0;top:35px;bottom:0;border:1px solid #8a8a8a;border-right:0;padding:6px 8px;overflow:auto;white-space:pre-wrap;word-break:break-word;line-height:1.3;user-select:text;-webkit-user-select:text;scrollbar-color:#8fb2e8 #f4f4f4}
@@ -349,8 +353,10 @@ body.eos-on{background:#fff}
 
 @media (max-width:900px){
   .eos-panel{margin:0 8px;min-height:0;display:flex;flex-direction:column}
-  .eos-left{position:relative;width:auto;height:auto;display:grid;grid-template-columns:1fr;grid-template-areas:"ah" "ans" "nq" "nr";gap:6px 12px;padding:10px 12px;align-items:start}
-  .eos-ah,.eos-ans,.eos-nq,.eos-nr{position:static}
+  .eos-left{position:relative;width:auto;height:auto;display:grid;grid-template-columns:1fr;grid-template-areas:"ah" "ans" "nq" "pq" "nr";gap:6px 12px;padding:10px 12px;align-items:start}
+  .eos-ah,.eos-ans,.eos-nq,.eos-nr,.eos-pq{position:static}
+  .eos-pq{grid-area:pq;width:150px}
+  .eos-prog{margin-left:12px;max-width:none}
   .eos-ah{grid-area:ah}.eos-ans{grid-area:ans;width:auto}
   .eos-chk{height:34px}
   .eos-nq{grid-area:nq;width:150px;margin:6px 0 0}.eos-nr{grid-area:nr;width:150px}

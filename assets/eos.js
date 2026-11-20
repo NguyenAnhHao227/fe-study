@@ -105,12 +105,17 @@ function panelHTML() {
       <div class="eos-ah">Answer</div>
       <div class="eos-ans" id="eosAns">${ansHTML(c)}</div>
       <button class="eos-btn eos-nq" data-e="nextq"${no >= total ? ' disabled' : ''}>Next Question</button>
+      <button class="eos-btn eos-pq" data-e="prevq"${no <= 1 ? ' disabled' : ''}>Previous Question</button>
       ${S.bank ? '' : `<button class="eos-btn eos-nr" data-e="nextr"${reading && c.i < c.list.length - 1 ? '' : ' disabled'}>Next Reading</button>`}
     </div>
     <div class="eos-right"><div class="eos-rh">${esc(head)}</div>
       <div class="eos-text" id="eosText" style="${textStyle()}">${S.hide ? '' : esc(textOf(c))}</div></div>`;
 }
-const tabsHTML = () => TABS.map(([k, l]) => `<button class="eos-tab${S.tab === k ? ' on' : ''}" data-e="tab" data-t="${k}">${l}</button>`).join('');
+/* thanh tiến độ (xanh): mỗi câu đã chọn đáp án thì thanh dài thêm một vạch, chọn đủ thì đầy */
+function progCount() { let n = 0, got = 0; eachQ((tab, q, key) => { n++; if (answered(tab, q, S.ans[key])) got++; }); return [got, n]; }
+const progHTML = () => { const [got, n] = progCount(); return `<div class="eos-prog" id="eosProg" title="${got}/${n}"><i style="width:${n ? (got / n * 100).toFixed(2) : 0}%"></i></div>`; };
+function updProg() { const p = document.getElementById('eosProg'); if (!p || !S) return; const [got, n] = progCount(); p.title = got + '/' + n; p.firstChild.style.width = (n ? got / n * 100 : 0).toFixed(2) + '%'; }
+const tabsHTML = () => TABS.map(([k, l]) => `<button class="eos-tab${S.tab === k ? ' on' : ''}" data-e="tab" data-t="${k}">${l}</button>`).join('') + progHTML();
 function qmark() { const q = curQ(cur()); return q ? fm(q.mark || 0) : ''; }
 function paint() {
   const $ = id => document.getElementById(id); if (!$('eosPanel')) return;
@@ -230,6 +235,7 @@ function onClick(e) {
   switch (t.dataset.e) {
     case 'tab': S.tab = t.dataset.t; S.qi = 0; paint(); break;
     case 'nextq': { if (c.tab === 'reading') { if (S.qi < c.item.qs.length - 1) S.qi++; else if (c.i < c.list.length - 1) { S.pos.reading = c.i + 1; S.qi = 0; } } else S.pos[c.tab] = Math.min(c.i + 1, c.list.length - 1); paint(); break; }
+    case 'prevq': { if (c.tab === 'reading') { if (S.qi > 0) S.qi--; else if (c.i > 0) { S.pos.reading = c.i - 1; S.qi = c.list[c.i - 1].qs.length - 1; } } else S.pos[c.tab] = Math.max(c.i - 1, 0); paint(); break; }
     case 'nextr': S.pos.reading = Math.min(c.i + 1, c.list.length - 1); S.qi = 0; paint(); break;
     case 'show': S.hide = !S.hide; { const x = document.getElementById('eosText'); if (x) x.textContent = S.hide ? '' : textOf(c); } break;
     case 'fin': tryFinish(); break;
@@ -244,6 +250,7 @@ function onChange(e) {
     const k = keyOf(c), q = curQ(c), v = t.dataset.v;
     if (q && String(q.a).length > 1) { const set = new Set((S.ans[k] || '').split('').filter(Boolean)); if (t.checked) set.add(v); else set.delete(v); const str = [...set].sort().join(''); if (str) S.ans[k] = str; else delete S.ans[k]; }
     else if (t.checked) S.ans[k] = v; else delete S.ans[k];
+    updProg();
     const a = document.getElementById('eosAns'); if (a) a.innerHTML = ansHTML(c); }
   else if (d === 'chk') { S.chk = t.checked; document.querySelectorAll('.eos [data-e=chk]').forEach(x => { x.checked = S.chk; }); const b = document.getElementById('eosFinTop'); if (b) b.disabled = !S.chk; }
   else if (d === 'font') { S.font = t.value; const x = document.getElementById('eosText'); if (x) x.setAttribute('style', textStyle()); }
